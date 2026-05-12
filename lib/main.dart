@@ -344,13 +344,8 @@ class _NoteHomePageState extends State<NoteHomePage> with TickerProviderStateMix
         },
         transitionDuration: const Duration(milliseconds: 400),
       ),
-    ).then((newNote) async {
+    ).then((newNote) {
       if (newNote != null && newNote is Note) {
-        try {
-          await DatabaseService.insertNote(newNote);
-        } catch (e) {
-          debugPrint('数据库插入失败: $e');
-        }
         setState(() {
           _notes.insert(0, newNote);
           _applyFilters();
@@ -378,13 +373,8 @@ class _NoteHomePageState extends State<NoteHomePage> with TickerProviderStateMix
         },
         transitionDuration: const Duration(milliseconds: 300),
       ),
-    ).then((updatedNote) async {
+    ).then((updatedNote) {
       if (updatedNote != null && updatedNote is Note) {
-        try {
-          await DatabaseService.updateNote(updatedNote);
-        } catch (e) {
-          debugPrint('数据库更新失败: $e');
-        }
         setState(() {
           final index = _notes.indexWhere((n) => n.id == updatedNote.id);
           if (index != -1) {
@@ -484,15 +474,24 @@ class _NoteHomePageState extends State<NoteHomePage> with TickerProviderStateMix
     }
   }
 
-  void _toggleFavorite(Note note) {
+  Future<void> _toggleFavorite(Note note) async {
+    final updatedNote = note.copyWith(isFavorite: !note.isFavorite);
+    
     setState(() {
       final index = _notes.indexWhere((n) => n.id == note.id);
       if (index != -1) {
-        _notes[index] = note.copyWith(isFavorite: !note.isFavorite);
+        _notes[index] = updatedNote;
         _applyFilters();
       }
     });
-    _saveNotes();
+    
+    try {
+      await DatabaseService.updateNote(updatedNote);
+    } catch (e) {
+      debugPrint('数据库更新失败: $e');
+    }
+    
+    await _saveNotes();
     _showSnackBar(
       note.isFavorite ? '⭐ 取消收藏' : '⭐ 已收藏',
       note.isFavorite ? Icons.star_border : Icons.star,
@@ -1946,7 +1945,7 @@ class _NoteEditorPageState extends State<NoteEditorPage> with SingleTickerProvid
     }
   }
 
-  void _saveNote({bool silent = false}) {
+  Future<void> _saveNote({bool silent = false}) async {
     final title = _titleController.text.trim();
     final content = _contentController.text.trim();
     
@@ -1966,6 +1965,16 @@ class _NoteEditorPageState extends State<NoteEditorPage> with SingleTickerProvid
       mood: _selectedMood,
       images: _images,
     );
+
+    try {
+      if (widget.note == null) {
+        await DatabaseService.insertNote(note);
+      } else {
+        await DatabaseService.updateNote(note);
+      }
+    } catch (e) {
+      debugPrint('数据库保存失败: $e');
+    }
 
     setState(() => _isSaved = true);
     
