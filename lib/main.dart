@@ -2320,7 +2320,6 @@ class _NoteEditorPageState extends State<NoteEditorPage> with SingleTickerProvid
   ];
   
   late AnimationController _colorAnimationController;
-  late Animation<double> _fadeAnimation;
 
   @override
   void initState() {
@@ -2329,10 +2328,7 @@ class _NoteEditorPageState extends State<NoteEditorPage> with SingleTickerProvid
       vsync: this,
       duration: const Duration(milliseconds: 500),
     );
-    _fadeAnimation = CurvedAnimation(
-      parent: _colorAnimationController,
-      curve: Curves.easeIn,
-    );
+    _colorAnimationController.forward();
     
     if (widget.note != null) {
       _titleController.text = widget.note!.title;
@@ -3178,7 +3174,7 @@ class NoteTemplateService {
       icon: '📔',
       color: 0xFFFFF5E6,
       title: '${DateTime.now().year}/${DateTime.now().month}/${DateTime.now().day} 日记',
-      content: '📅 今日日期：\n\n🌤️ 今日心情：\n\n📝 今日收获：\n\n✨ 明日计划：\n',
+      content: '📅 今日日期：\n🌤️ 今日心情：\n📝 今日收获：\n✨ 明日计划：',
       defaultTags: ['日记'],
       mood: '✨',
     ),
@@ -3189,7 +3185,7 @@ class NoteTemplateService {
       icon: '📋',
       color: 0xFFF6FFED,
       title: '待办事项',
-      content: '🔴 紧急事项：\n1. \n2. \n\n🟡 重要事项：\n1. \n2. \n\n🟢 一般事项：\n1. \n2. \n\n✅ 已完成：\n1. \n',
+      content: '🔴 紧急：\n1. \n2. \n🟡 重要：\n1. \n2. \n🟢 一般：\n1. \n2.',
       defaultTags: ['任务'],
       mood: '🎯',
     ),
@@ -3200,7 +3196,7 @@ class NoteTemplateService {
       icon: '📊',
       color: 0xFFE6F7FF,
       title: '会议记录',
-      content: '📅 会议时间：\n📍 会议地点：\n👥 参会人员：\n\n📋 会议主题：\n\n🔍 讨论要点：\n1. \n2. \n\n✅ 会议结论：\n1. \n\n📌 下一步行动：\n负责人：    截止日期：\n',
+      content: '📅 时间：\n📍 地点：\n👥 参会：\n📋 主题：\n🔍 讨论：\n✅ 结论：',
       defaultTags: ['会议'],
       mood: '💡',
     ),
@@ -3211,7 +3207,7 @@ class NoteTemplateService {
       icon: '📚',
       color: 0xFFF0E6FF,
       title: '学习笔记',
-      content: '📖 学习主题：\n\n📅 学习日期：\n\n📝 知识点：\n1. \n2. \n3. \n\n💡 理解与感悟：\n\n❓ 疑问与不解：\n\n🔗 相关资源：\n',
+      content: '📖 主题：\n📅 日期：\n📝 知识点：\n1. \n2. \n💡 感悟：\n❓ 疑问：',
       defaultTags: ['学习'],
       mood: '📚',
     ),
@@ -3222,7 +3218,7 @@ class NoteTemplateService {
       icon: '💡',
       color: 0xFFFFE6E6,
       title: '💡 灵感记录',
-      content: '💡 灵感描述：\n\n🎯 应用场景：\n\n👥 目标用户：\n\n⭐ 核心价值：\n\n🔧 实现方案：\n\n📊 预期效果：\n',
+      content: '💡 描述：\n🎯 应用：\n👥 用户：\n⭐ 价值：\n🔧 方案：',
       defaultTags: ['灵感', '创意'],
       mood: '💡',
     ),
@@ -3233,7 +3229,7 @@ class NoteTemplateService {
       icon: '📖',
       color: 0xFFE6FFFF,
       title: '读书笔记',
-      content: '📚 书名：\n✍️ 作者：\n📅 阅读日期：\n\n📖 章节/页数：\n\n💬 金句摘录：\n\n📝 读后感：\n\n🎯 推荐理由：\n',
+      content: '📚 书名：\n✍️ 作者：\n📅 日期：\n💬 金句：\n📝 感悟：',
       defaultTags: ['读书'],
       mood: '📚',
     ),
@@ -3244,7 +3240,7 @@ class NoteTemplateService {
       icon: '💼',
       color: 0xFFE6FFE6,
       title: '工作日志',
-      content: '📅 日期：\n\n📌 今日完成：\n1. \n2. \n3. \n\n🔄 进行中：\n1. \n2. \n\n📋 明日计划：\n1. \n2. \n\n📊 工作反思：\n',
+      content: '📅 日期：\n📌 完成：\n1. \n2. \n🔄 进行中：\n📋 明日计划：',
       defaultTags: ['工作'],
       mood: '💼',
     ),
@@ -3255,15 +3251,11 @@ class NoteTemplateService {
       icon: '🏃',
       color: 0xFFF6FFED,
       title: '健康日志',
-      content: '📅 日期：\n\n😴 睡眠情况：\n⏰ 睡眠时长：  睡眠质量：\n\n🏃 运动情况：\n类型：    时长：\n\n🍎 饮食情况：\n早餐：\n午餐：\n晚餐：\n\n😊 心情状态：\n\n📝 备注：\n',
+      content: '📅 日期：\n😴 睡眠：\n🏃 运动：\n🍎 饮食：\n😊 心情：',
       defaultTags: ['健康'],
       mood: '🏃',
     ),
   ];
-
-  static List<NoteTemplate> getTemplates() {
-    return defaultTemplates;
-  }
 }
 
 enum ViewMode { grid, list, compact }
