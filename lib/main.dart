@@ -72,6 +72,7 @@ class _NoteHomePageState extends State<NoteHomePage> with TickerProviderStateMix
   ViewMode _viewMode = ViewMode.grid;
   String _sortBy = 'date';
   final Set<String> _selectedTags = {};
+  final GlobalKey<AnimatedListState> _listKey = GlobalKey<AnimatedListState>();
   
   final TextEditingController _searchController = TextEditingController();
   late AnimationController _fabAnimationController;
@@ -280,8 +281,31 @@ class _NoteHomePageState extends State<NoteHomePage> with TickerProviderStateMix
     });
   }
 
-  void _deleteNote(Note note, int index) {
+  Future<void> _deleteNote(Note note, int index) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('删除笔记？'),
+        content: Text('确定要删除笔记「${note.title}」吗？'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('取消'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(context, true),
+            style: TextButton.styleFrom(foregroundColor: Colors.red),
+            child: const Text('删除'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed != true) return;
+
     final deletedNote = note;
+    final originalIndex = _notes.indexWhere((n) => n.id == note.id);
+    
     setState(() {
       _notes.removeWhere((n) => n.id == note.id);
       _applyFilters();
@@ -305,14 +329,15 @@ class _NoteHomePageState extends State<NoteHomePage> with TickerProviderStateMix
             onPressed: () {
               if (mounted) {
                 setState(() {
-                  _notes.insert(index.clamp(0, _notes.length), deletedNote);
+                  _notes.insert(originalIndex.clamp(0, _notes.length), deletedNote);
                   _applyFilters();
                 });
                 _saveNotes();
+                _showSnackBar('笔记已恢复', Icons.restore, Colors.green);
               }
             },
           ),
-          duration: const Duration(seconds: 3),
+          duration: const Duration(seconds: 5),
           behavior: SnackBarBehavior.floating,
           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
           backgroundColor: Colors.grey[800],
@@ -1001,7 +1026,7 @@ class _QuickStat extends StatelessWidget {
 class _NoteCard extends StatefulWidget {
   final Note note;
   final VoidCallback onTap;
-  final VoidCallback onDelete;
+  final Future<void> Function() onDelete;
   final VoidCallback onFavorite;
   final bool isDark;
 
@@ -1020,7 +1045,6 @@ class _NoteCard extends StatefulWidget {
 class _NoteCardState extends State<_NoteCard> with SingleTickerProviderStateMixin {
   late AnimationController _controller;
   late Animation<double> _scaleAnimation;
-  double _dragOffset = 0;
   bool _isPressed = false;
 
   @override
@@ -1057,22 +1081,6 @@ class _NoteCardState extends State<_NoteCard> with SingleTickerProviderStateMixi
         setState(() => _isPressed = false);
         _controller.reverse();
       },
-      onHorizontalDragUpdate: (details) {
-        setState(() {
-          _dragOffset += details.delta.dx;
-          _dragOffset = _dragOffset.clamp(-80.0, 80.0);
-        });
-      },
-      onHorizontalDragEnd: (details) {
-        if (_dragOffset.abs() > 60) {
-          if (_dragOffset > 0) {
-            widget.onFavorite();
-          } else {
-            widget.onDelete();
-          }
-        }
-        setState(() => _dragOffset = 0);
-      },
       child: AnimatedBuilder(
         animation: _scaleAnimation,
         builder: (context, child) {
@@ -1081,119 +1089,147 @@ class _NoteCardState extends State<_NoteCard> with SingleTickerProviderStateMixi
             child: child,
           );
         },
-        child: Stack(
-          children: [
-            Positioned.fill(
-              child: AnimatedContainer(
-                duration: const Duration(milliseconds: 100),
-                decoration: BoxDecoration(
-                  color: _dragOffset > 0 ? Colors.amber : Colors.red,
-                  borderRadius: BorderRadius.circular(16),
-                ),
-                child: Icon(
-                  _dragOffset > 0 ? Icons.star : Icons.delete,
-                  color: Colors.white,
-                  size: 32,
-                ),
+        child: Container(
+          decoration: BoxDecoration(
+            color: Color(widget.note.color),
+            borderRadius: BorderRadius.circular(16),
+            boxShadow: [
+              BoxShadow(
+                color: _isPressed 
+                    ? Colors.black.withOpacity(0.15)
+                    : Colors.black.withOpacity(0.08),
+                blurRadius: _isPressed ? 12 : 8,
+                offset: Offset(0, _isPressed ? 6 : 4),
               ),
-            ),
-            AnimatedContainer(
-              duration: const Duration(milliseconds: 100),
-              transform: Matrix4.translationValues(_dragOffset, 0, 0),
-              decoration: BoxDecoration(
-                color: Color(widget.note.color),
-                borderRadius: BorderRadius.circular(16),
-                boxShadow: [
-                  BoxShadow(
-                    color: _isPressed 
-                        ? Colors.black.withOpacity(0.15)
-                        : Colors.black.withOpacity(0.08),
-                    blurRadius: _isPressed ? 12 : 8,
-                    offset: Offset(0, _isPressed ? 6 : 4),
-                  ),
-                ],
-              ),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  if (widget.note.mood.isNotEmpty)
-                    Padding(
-                      padding: const EdgeInsets.fromLTRB(12, 12, 12, 0),
-                      child: Text(
+            ],
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              if (widget.note.mood.isNotEmpty)
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(12, 12, 12, 0),
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Text(
                         widget.note.mood,
                         style: const TextStyle(fontSize: 28),
                       ),
-                    ),
-                  Expanded(
-                    child: Padding(
-                      padding: const EdgeInsets.all(12),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
+                      Row(
+                        mainAxisSize: MainAxisSize.min,
                         children: [
-                          Row(
-                            children: [
-                              if (widget.note.isFavorite)
-                                const Padding(
-                                  padding: EdgeInsets.only(right: 4),
-                                  child: Icon(Icons.star, color: Colors.amber, size: 16),
-                                ),
-                              Expanded(
-                                child: Text(
-                                  widget.note.title,
-                                  style: const TextStyle(
-                                    fontSize: 15,
-                                    fontWeight: FontWeight.w600,
-                                    color: Color(0xFF1A1A1A),
-                                  ),
-                                  maxLines: 1,
-                                  overflow: TextOverflow.ellipsis,
-                                ),
-                              ),
-                            ],
+                          IconButton(
+                            icon: Icon(
+                              widget.note.isFavorite ? Icons.star : Icons.star_border,
+                              color: Colors.amber,
+                              size: 20,
+                            ),
+                            onPressed: widget.onFavorite,
+                            padding: const EdgeInsets.all(4),
+                            constraints: const BoxConstraints(),
                           ),
-                          const SizedBox(height: 8),
+                          IconButton(
+                            icon: const Icon(Icons.delete_outline, color: Colors.redAccent, size: 20),
+                            onPressed: widget.onDelete,
+                            padding: const EdgeInsets.all(4),
+                            constraints: const BoxConstraints(),
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
+                ),
+              Expanded(
+                child: Padding(
+                  padding: const EdgeInsets.all(12),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        children: [
+                          if (widget.note.isFavorite && widget.note.mood.isEmpty)
+                            const Padding(
+                              padding: EdgeInsets.only(right: 4),
+                              child: Icon(Icons.star, color: Colors.amber, size: 16),
+                            ),
                           Expanded(
                             child: Text(
-                              widget.note.content,
-                              style: TextStyle(
-                                fontSize: 13,
-                                color: Colors.grey[700],
-                                height: 1.4,
+                              widget.note.title,
+                              style: const TextStyle(
+                                fontSize: 15,
+                                fontWeight: FontWeight.w600,
+                                color: Color(0xFF1A1A1A),
                               ),
-                              maxLines: 3,
+                              maxLines: 1,
                               overflow: TextOverflow.ellipsis,
                             ),
                           ),
-                          if (widget.note.tags.isNotEmpty) ...[
-                            const SizedBox(height: 8),
-                            Wrap(
-                              spacing: 4,
-                              runSpacing: 4,
-                              children: widget.note.tags.take(2).map((tag) => Container(
-                                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
-                                decoration: BoxDecoration(
-                                  color: Colors.black.withOpacity(0.08),
-                                  borderRadius: BorderRadius.circular(6),
-                                ),
-                                child: Text(
-                                  '#$tag',
-                                  style: TextStyle(
-                                    fontSize: 11,
-                                    color: Colors.grey[600],
-                                    fontWeight: FontWeight.w500,
+                          if (widget.note.mood.isEmpty)
+                            Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                IconButton(
+                                  icon: Icon(
+                                    widget.note.isFavorite ? Icons.star : Icons.star_border,
+                                    color: Colors.amber,
+                                    size: 20,
                                   ),
+                                  onPressed: widget.onFavorite,
+                                  padding: const EdgeInsets.all(4),
+                                  constraints: const BoxConstraints(),
                                 ),
-                              )).toList(),
+                                IconButton(
+                                  icon: const Icon(Icons.delete_outline, color: Colors.redAccent, size: 20),
+                                  onPressed: widget.onDelete,
+                                  padding: const EdgeInsets.all(4),
+                                  constraints: const BoxConstraints(),
+                                ),
+                              ],
                             ),
-                          ],
                         ],
                       ),
-                    ),
+                      const SizedBox(height: 8),
+                      Expanded(
+                        child: Text(
+                          widget.note.content,
+                          style: TextStyle(
+                            fontSize: 13,
+                            color: Colors.grey[700],
+                            height: 1.4,
+                          ),
+                          maxLines: 3,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+                      if (widget.note.tags.isNotEmpty) ...[
+                        const SizedBox(height: 8),
+                        Wrap(
+                          spacing: 4,
+                          runSpacing: 4,
+                          children: widget.note.tags.take(2).map((tag) => Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
+                            decoration: BoxDecoration(
+                              color: Colors.black.withOpacity(0.08),
+                              borderRadius: BorderRadius.circular(6),
+                            ),
+                            child: Text(
+                              '#$tag',
+                              style: TextStyle(
+                                fontSize: 11,
+                                color: Colors.grey[600],
+                                fontWeight: FontWeight.w500,
+                              ),
+                            ),
+                          )).toList(),
+                        ),
+                      ],
+                    ],
                   ),
-                ],
+                ),
               ),
-            ),
-          ],
+            ],
+          ),
         ),
       ),
     );
@@ -1203,7 +1239,7 @@ class _NoteCardState extends State<_NoteCard> with SingleTickerProviderStateMixi
 class _NoteListItem extends StatelessWidget {
   final Note note;
   final VoidCallback onTap;
-  final VoidCallback onDelete;
+  final Future<void> Function() onDelete;
   final VoidCallback onFavorite;
   final bool isDark;
 
@@ -1217,134 +1253,127 @@ class _NoteListItem extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Dismissible(
-      key: Key(note.id),
-      direction: DismissDirection.horizontal,
-      confirmDismiss: (direction) async {
-        if (direction == DismissDirection.startToEnd) {
-          onFavorite();
-        } else {
-          onDelete();
-        }
-        return false;
-      },
-      background: Container(
-        decoration: BoxDecoration(
-          color: Colors.amber,
-          borderRadius: BorderRadius.circular(16),
-        ),
-        alignment: Alignment.centerLeft,
-        padding: const EdgeInsets.only(left: 24),
-        child: const Icon(Icons.star, color: Colors.white, size: 28),
-      ),
-      secondaryBackground: Container(
-        decoration: BoxDecoration(
-          color: Colors.red,
-          borderRadius: BorderRadius.circular(16),
-        ),
-        alignment: Alignment.centerRight,
-        padding: const EdgeInsets.only(right: 24),
-        child: const Icon(Icons.delete, color: Colors.white, size: 28),
-      ),
-      child: Material(
-        color: Colors.transparent,
-        child: InkWell(
-          onTap: onTap,
-          borderRadius: BorderRadius.circular(16),
-          child: Container(
-            padding: const EdgeInsets.all(16),
-            decoration: BoxDecoration(
-              color: Color(note.color),
-              borderRadius: BorderRadius.circular(16),
-              boxShadow: [
-                BoxShadow(
-                  color: Colors.black.withOpacity(0.05),
-                  blurRadius: 8,
-                  offset: const Offset(0, 2),
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(16),
+        child: Container(
+          padding: const EdgeInsets.all(16),
+          decoration: BoxDecoration(
+            color: Color(note.color),
+            borderRadius: BorderRadius.circular(16),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withOpacity(0.05),
+                blurRadius: 8,
+                offset: const Offset(0, 2),
+              ),
+            ],
+          ),
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              if (note.mood.isNotEmpty)
+                Padding(
+                  padding: const EdgeInsets.only(right: 12),
+                  child: Text(note.mood, style: const TextStyle(fontSize: 28)),
                 ),
-              ],
-            ),
-            child: Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                if (note.mood.isNotEmpty)
-                  Padding(
-                    padding: const EdgeInsets.only(right: 12),
-                    child: Text(note.mood, style: const TextStyle(fontSize: 28)),
-                  ),
-                Container(
-                  width: 4,
-                  height: 60,
-                  decoration: BoxDecoration(
-                    color: const Color(0xFF6366F1),
-                    borderRadius: BorderRadius.circular(2),
-                  ),
+              Container(
+                width: 4,
+                height: 60,
+                decoration: BoxDecoration(
+                  color: const Color(0xFF6366F1),
+                  borderRadius: BorderRadius.circular(2),
                 ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Row(
-                        children: [
-                          if (note.isFavorite)
-                            const Padding(
-                              padding: EdgeInsets.only(right: 4),
-                              child: Icon(Icons.star, color: Colors.amber, size: 16),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        if (note.isFavorite)
+                          const Padding(
+                            padding: EdgeInsets.only(right: 4),
+                            child: Icon(Icons.star, color: Colors.amber, size: 16),
+                          ),
+                        Expanded(
+                          child: Text(
+                            note.title,
+                            style: const TextStyle(
+                              fontSize: 16,
+                              fontWeight: FontWeight.w600,
                             ),
-                          Expanded(
-                            child: Text(
-                              note.title,
-                              style: const TextStyle(
-                                fontSize: 16,
-                                fontWeight: FontWeight.w600,
-                              ),
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 6),
+                    Text(
+                      note.content,
+                      style: TextStyle(
+                        fontSize: 13,
+                        color: Colors.grey[600],
+                      ),
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                    const SizedBox(height: 8),
+                    if (note.tags.isNotEmpty)
+                      Wrap(
+                        spacing: 6,
+                        runSpacing: 4,
+                        children: note.tags.map((tag) => Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
+                          decoration: BoxDecoration(
+                            color: Colors.black.withOpacity(0.08),
+                            borderRadius: BorderRadius.circular(4),
+                          ),
+                          child: Text(
+                            '#$tag',
+                            style: TextStyle(
+                              fontSize: 11,
+                              color: Colors.grey[600],
                             ),
                           ),
-                        ],
+                        )).toList(),
                       ),
-                      const SizedBox(height: 6),
-                      Text(
-                        note.content,
-                        style: TextStyle(
-                          fontSize: 13,
-                          color: Colors.grey[600],
-                        ),
-                        maxLines: 2,
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                      const SizedBox(height: 8),
-                      if (note.tags.isNotEmpty)
-                        Wrap(
-                          spacing: 6,
-                          runSpacing: 4,
-                          children: note.tags.map((tag) => Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
-                            decoration: BoxDecoration(
-                              color: Colors.black.withOpacity(0.08),
-                              borderRadius: BorderRadius.circular(4),
-                            ),
-                            child: Text(
-                              '#$tag',
-                              style: TextStyle(
-                                fontSize: 11,
-                                color: Colors.grey[600],
-                              ),
-                            ),
-                          )).toList(),
-                        ),
-                    ],
+                  ],
+                ),
+              ),
+              const SizedBox(width: 8),
+              Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  IconButton(
+                    icon: Icon(
+                      note.isFavorite ? Icons.star : Icons.star_border,
+                      color: Colors.amber,
+                      size: 20,
+                    ),
+                    onPressed: onFavorite,
+                    padding: const EdgeInsets.all(4),
+                    constraints: const BoxConstraints(),
                   ),
-                ),
-                const SizedBox(width: 12),
-                Text(
-                  _formatTime(note.createdAt),
-                  style: TextStyle(fontSize: 11, color: Colors.grey[500]),
-                ),
-              ],
-            ),
+                  const SizedBox(height: 4),
+                  IconButton(
+                    icon: const Icon(Icons.delete_outline, color: Colors.redAccent, size: 20),
+                    onPressed: onDelete,
+                    padding: const EdgeInsets.all(4),
+                    constraints: const BoxConstraints(),
+                  ),
+                  const SizedBox(height: 8),
+                  Text(
+                    _formatTime(note.createdAt),
+                    style: TextStyle(fontSize: 11, color: Colors.grey[500]),
+                  ),
+                ],
+              ),
+            ],
           ),
         ),
       ),
@@ -1366,7 +1395,7 @@ class _NoteListItem extends StatelessWidget {
 class _NoteCompactItem extends StatelessWidget {
   final Note note;
   final VoidCallback onTap;
-  final VoidCallback onDelete;
+  final Future<void> Function() onDelete;
   final VoidCallback onFavorite;
   final bool isDark;
 
@@ -1380,65 +1409,58 @@ class _NoteCompactItem extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Dismissible(
-      key: Key(note.id),
-      direction: DismissDirection.horizontal,
-      confirmDismiss: (direction) async {
-        if (direction == DismissDirection.startToEnd) {
-          onFavorite();
-        } else {
-          onDelete();
-        }
-        return false;
-      },
-      background: Container(
-        color: Colors.amber,
-        alignment: Alignment.centerLeft,
-        padding: const EdgeInsets.only(left: 20),
-        child: const Icon(Icons.star, color: Colors.white, size: 24),
-      ),
-      secondaryBackground: Container(
-        color: Colors.red,
-        alignment: Alignment.centerRight,
-        padding: const EdgeInsets.only(right: 20),
-        child: const Icon(Icons.delete, color: Colors.white, size: 24),
-      ),
-      child: Material(
-        color: Colors.transparent,
-        child: InkWell(
-          onTap: onTap,
-          child: Container(
-            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-            decoration: BoxDecoration(
-              color: Color(note.color),
-              borderRadius: BorderRadius.circular(12),
-            ),
-            child: Row(
-              children: [
-                if (note.mood.isNotEmpty)
-                  Padding(
-                    padding: const EdgeInsets.only(right: 8),
-                    child: Text(note.mood, style: const TextStyle(fontSize: 20)),
-                  ),
-                if (note.isFavorite)
-                  const Padding(
-                    padding: EdgeInsets.only(right: 6),
-                    child: Icon(Icons.star, color: Colors.amber, size: 14),
-                  ),
-                Expanded(
-                  child: Text(
-                    note.title,
-                    style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w500),
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                  ),
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: onTap,
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+          decoration: BoxDecoration(
+            color: Color(note.color),
+            borderRadius: BorderRadius.circular(12),
+          ),
+          child: Row(
+            children: [
+              if (note.mood.isNotEmpty)
+                Padding(
+                  padding: const EdgeInsets.only(right: 8),
+                  child: Text(note.mood, style: const TextStyle(fontSize: 20)),
                 ),
-                Text(
-                  _formatTime(note.createdAt),
-                  style: TextStyle(fontSize: 11, color: Colors.grey[500]),
+              if (note.isFavorite)
+                const Padding(
+                  padding: EdgeInsets.only(right: 6),
+                  child: Icon(Icons.star, color: Colors.amber, size: 14),
                 ),
-              ],
-            ),
+              Expanded(
+                child: Text(
+                  note.title,
+                  style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w500),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ),
+              IconButton(
+                icon: Icon(
+                  note.isFavorite ? Icons.star : Icons.star_border,
+                  color: Colors.amber,
+                  size: 18,
+                ),
+                onPressed: onFavorite,
+                padding: const EdgeInsets.all(4),
+                constraints: const BoxConstraints(),
+              ),
+              IconButton(
+                icon: const Icon(Icons.delete_outline, color: Colors.redAccent, size: 18),
+                onPressed: onDelete,
+                padding: const EdgeInsets.all(4),
+                constraints: const BoxConstraints(),
+              ),
+              const SizedBox(width: 4),
+              Text(
+                _formatTime(note.createdAt),
+                style: TextStyle(fontSize: 11, color: Colors.grey[500]),
+              ),
+            ],
           ),
         ),
       ),
@@ -1473,6 +1495,8 @@ class _NoteEditorPageState extends State<NoteEditorPage> with SingleTickerProvid
   int _selectedColor = 0xFFFFF5E6;
   final List<String> _tags = [];
   String _selectedMood = '';
+  bool _isSaved = true;
+  Timer? _autoSaveTimer;
   
   final List<int> _colors = [
     0xFFFFF5E6, 0xFFE6F7FF, 0xFFF6FFED, 0xFFFFF0E6, 0xFFF0E6FF,
@@ -1512,15 +1536,35 @@ class _NoteEditorPageState extends State<NoteEditorPage> with SingleTickerProvid
       _tags.addAll(widget.note!.tags);
       _selectedMood = widget.note!.mood;
     }
+    
+    _titleController.addListener(_onContentChanged);
+    _contentController.addListener(_onContentChanged);
+    
     _colorAnimationController.forward();
   }
 
-  void _saveNote() {
+  void _onContentChanged() {
+    if (_isSaved) {
+      setState(() => _isSaved = false);
+    }
+    _startAutoSaveTimer();
+  }
+
+  void _startAutoSaveTimer() {
+    _autoSaveTimer?.cancel();
+    _autoSaveTimer = Timer(const Duration(seconds: 3), () {
+      if (mounted && widget.note != null) {
+        _saveNote(silent: true);
+      }
+    });
+  }
+
+  void _saveNote({bool silent = false}) {
     final title = _titleController.text.trim();
     final content = _contentController.text.trim();
     
     if (title.isEmpty && content.isEmpty) {
-      Navigator.pop(context);
+      if (!silent) Navigator.pop(context);
       return;
     }
 
@@ -1535,7 +1579,42 @@ class _NoteEditorPageState extends State<NoteEditorPage> with SingleTickerProvid
       mood: _selectedMood,
     );
 
-    Navigator.pop(context, note);
+    setState(() => _isSaved = true);
+    
+    if (silent) {
+      Navigator.of(context).pop(note);
+    } else {
+      Navigator.pop(context, note);
+    }
+  }
+
+  Future<bool> _onWillPop() async {
+    if (_isSaved) return true;
+    
+    final title = _titleController.text.trim();
+    final content = _contentController.text.trim();
+    
+    if (title.isEmpty && content.isEmpty) return true;
+    
+    return await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('是否保存笔记？'),
+        content: const Text('你有未保存的更改，是否保存？'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('不保存'),
+          ),
+          TextButton(
+            onPressed: () {
+              _saveNote();
+            },
+            child: const Text('保存'),
+          ),
+        ],
+      ),
+    ) ?? false;
   }
 
   void _addTag() {
@@ -1611,34 +1690,52 @@ class _NoteEditorPageState extends State<NoteEditorPage> with SingleTickerProvid
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
 
-    return Scaffold(
-      backgroundColor: Color(_selectedColor),
-      appBar: AppBar(
-        backgroundColor: Colors.transparent,
-        elevation: 0,
-        leading: Padding(
-          padding: const EdgeInsets.only(left: 12),
-          child: IconButton(
-            icon: Icon(Icons.close, color: isDark ? Colors.white70 : Colors.grey[700], size: 28),
-            onPressed: () => Navigator.pop(context),
-          ),
-        ),
-        actions: [
-          Padding(
-            padding: const EdgeInsets.only(right: 12),
-            child: TextButton.icon(
-              onPressed: _saveNote,
-              style: TextButton.styleFrom(
-                padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
-                backgroundColor: const Color(0xFF6366F1),
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-              ),
-              icon: const Icon(Icons.check, color: Colors.white, size: 22),
-              label: Text(widget.note != null ? '更新' : '保存', style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w600, fontSize: 16)),
+    return WillPopScope(
+      onWillPop: _onWillPop,
+      child: Scaffold(
+        backgroundColor: Color(_selectedColor),
+        appBar: AppBar(
+          backgroundColor: Colors.transparent,
+          elevation: 0,
+          leading: Padding(
+            padding: const EdgeInsets.only(left: 12),
+            child: IconButton(
+              icon: Icon(Icons.arrow_back, color: isDark ? Colors.white70 : Colors.grey[700], size: 28),
+              onPressed: () async {
+                if (await _onWillPop()) {
+                  Navigator.pop(context);
+                }
+              },
             ),
           ),
-        ],
-      ),
+          title: AnimatedSwitcher(
+            duration: const Duration(milliseconds: 300),
+            child: Text(
+              _isSaved ? '已保存' : '编辑中...',
+              key: ValueKey(_isSaved),
+              style: TextStyle(
+                fontSize: 14,
+                fontWeight: FontWeight.w500,
+                color: _isSaved ? Colors.green : Colors.orange,
+              ),
+            ),
+          ),
+          actions: [
+            Padding(
+              padding: const EdgeInsets.only(right: 12),
+              child: TextButton.icon(
+                onPressed: _saveNote,
+                style: TextButton.styleFrom(
+                  padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+                  backgroundColor: const Color(0xFF6366F1),
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                ),
+                icon: const Icon(Icons.check, color: Colors.white, size: 22),
+                label: Text(widget.note != null ? '更新' : '保存', style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w600, fontSize: 16)),
+              ),
+            ),
+          ],
+        ),
       body: FadeTransition(
         opacity: _fadeAnimation,
         child: Column(
@@ -1876,10 +1973,13 @@ class _NoteEditorPageState extends State<NoteEditorPage> with SingleTickerProvid
 
   @override
   void dispose() {
+    _titleController.removeListener(_onContentChanged);
+    _contentController.removeListener(_onContentChanged);
     _titleController.dispose();
     _contentController.dispose();
     _tagController.dispose();
     _colorAnimationController.dispose();
+    _autoSaveTimer?.cancel();
     super.dispose();
   }
 }
