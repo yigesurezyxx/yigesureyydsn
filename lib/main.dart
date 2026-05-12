@@ -343,8 +343,8 @@ class _NoteHomePageState extends State<NoteHomePage> with TickerProviderStateMix
       bool matchesDate = true;
       if (_filterStartDate != null) {
         matchesDate = matchesDate && 
-          note.createdAt.isAfter(_filterStartDate!) || 
-          note.createdAt.isAtSameMomentAs(_filterStartDate!);
+          (note.createdAt.isAfter(_filterStartDate!) || 
+           note.createdAt.isAtSameMomentAs(_filterStartDate!));
       }
       if (_filterEndDate != null) {
         matchesDate = matchesDate && 
@@ -429,33 +429,74 @@ class _NoteHomePageState extends State<NoteHomePage> with TickerProviderStateMix
   }
 
   void _addNote() {
-    Navigator.push(
-      context,
-      PageRouteBuilder(
-        pageBuilder: (_, animation, __) => const NoteEditorPage(),
-        transitionsBuilder: (_, animation, __, child) {
-          return SlideTransition(
-            position: Tween<Offset>(
-              begin: const Offset(0, 1),
-              end: Offset.zero,
-            ).animate(CurvedAnimation(
-              parent: animation,
-              curve: Curves.easeOutCubic,
-            )),
-            child: child,
-          );
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (context) => _TemplateSelectorSheet(
+        onSelectTemplate: (template) {
+          Navigator.pop(context);
+          final note = template.createNote();
+          Navigator.push(
+            context,
+            PageRouteBuilder(
+              pageBuilder: (_, animation, __) => NoteEditorPage(note: note, isFromTemplate: true),
+              transitionsBuilder: (_, animation, __, child) {
+                return SlideTransition(
+                  position: Tween<Offset>(
+                    begin: const Offset(0, 1),
+                    end: Offset.zero,
+                  ).animate(CurvedAnimation(
+                    parent: animation,
+                    curve: Curves.easeOutCubic,
+                  )),
+                  child: child,
+                );
+              },
+              transitionDuration: const Duration(milliseconds: 400),
+            ),
+          ).then((newNote) {
+            if (newNote != null && newNote is Note) {
+              setState(() {
+                _notes.insert(0, newNote);
+                _applyFilters();
+              });
+              _showSnackBar('✨ 笔记已创建', Icons.check_circle, Colors.green);
+            }
+          });
         },
-        transitionDuration: const Duration(milliseconds: 400),
+        onSkip: () {
+          Navigator.pop(context);
+          Navigator.push(
+            context,
+            PageRouteBuilder(
+              pageBuilder: (_, animation, __) => const NoteEditorPage(),
+              transitionsBuilder: (_, animation, __, child) {
+                return SlideTransition(
+                  position: Tween<Offset>(
+                    begin: const Offset(0, 1),
+                    end: Offset.zero,
+                  ).animate(CurvedAnimation(
+                    parent: animation,
+                    curve: Curves.easeOutCubic,
+                  )),
+                  child: child,
+                );
+              },
+              transitionDuration: const Duration(milliseconds: 400),
+            ),
+          ).then((newNote) {
+            if (newNote != null && newNote is Note) {
+              setState(() {
+                _notes.insert(0, newNote);
+                _applyFilters();
+              });
+              _showSnackBar('✨ 笔记已创建', Icons.check_circle, Colors.green);
+            }
+          });
+        },
       ),
-    ).then((newNote) {
-      if (newNote != null && newNote is Note) {
-        setState(() {
-          _notes.insert(0, newNote);
-          _applyFilters();
-        });
-        _showSnackBar('✨ 笔记已创建', Icons.check_circle, Colors.green);
-      }
-    });
+    );
   }
 
   void _editNote(Note note) {
@@ -1859,10 +1900,207 @@ class _NoteCompactItem extends StatelessWidget {
   }
 }
 
+class _TemplateSelectorSheet extends StatelessWidget {
+  final Function(NoteTemplate) onSelectTemplate;
+  final VoidCallback onSkip;
+
+  const _TemplateSelectorSheet({
+    required this.onSelectTemplate,
+    required this.onSkip,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final templates = NoteTemplateService.getTemplates();
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+
+    return Container(
+      constraints: BoxConstraints(
+        maxHeight: MediaQuery.of(context).size.height * 0.85,
+      ),
+      decoration: BoxDecoration(
+        color: isDark ? const Color(0xFF1E1E1E) : Colors.white,
+        borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
+      ),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Container(
+            margin: const EdgeInsets.only(top: 12),
+            width: 40,
+            height: 4,
+            decoration: BoxDecoration(
+              color: isDark ? Colors.white24 : Colors.grey[300],
+              borderRadius: BorderRadius.circular(2),
+            ),
+          ),
+          Padding(
+            padding: const EdgeInsets.all(20),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Text(
+                      '✨ 选择模板',
+                      style: TextStyle(
+                        fontSize: 22,
+                        fontWeight: FontWeight.bold,
+                        color: isDark ? Colors.white : Colors.black87,
+                      ),
+                    ),
+                    TextButton(
+                      onPressed: onSkip,
+                      child: Text(
+                        '跳过',
+                        style: TextStyle(
+                          fontSize: 16,
+                          color: isDark ? Colors.white70 : Colors.grey[600],
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  '选择一个模板快速开始',
+                  style: TextStyle(
+                    fontSize: 14,
+                    color: isDark ? Colors.white54 : Colors.grey[600],
+                  ),
+                ),
+              ],
+            ),
+          ),
+          Expanded(
+            child: GridView.builder(
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+              gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+                crossAxisCount: 2,
+                childAspectRatio: 0.85,
+                crossAxisSpacing: 12,
+                mainAxisSpacing: 12,
+              ),
+              itemCount: templates.length,
+              itemBuilder: (context, index) {
+                final template = templates[index];
+                return _TemplateCard(
+                  template: template,
+                  onTap: () => onSelectTemplate(template),
+                );
+              },
+            ),
+          ),
+          const SizedBox(height: 20),
+        ],
+      ),
+    );
+  }
+}
+
+class _TemplateCard extends StatelessWidget {
+  final NoteTemplate template;
+  final VoidCallback onTap;
+
+  const _TemplateCard({
+    required this.template,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(16),
+        child: Container(
+          decoration: BoxDecoration(
+            color: Color(template.color).withOpacity(isDark ? 0.3 : 1.0),
+            borderRadius: BorderRadius.circular(16),
+            border: Border.all(
+              color: isDark ? Colors.white12 : Colors.grey[200]!,
+              width: 1,
+            ),
+          ),
+          padding: const EdgeInsets.all(16),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  Text(
+                    template.icon,
+                    style: const TextStyle(fontSize: 28),
+                  ),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      template.name,
+                      style: TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.bold,
+                        color: isDark ? Colors.white : Colors.black87,
+                      ),
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 8),
+              Expanded(
+                child: Text(
+                  template.description,
+                  style: TextStyle(
+                    fontSize: 12,
+                    color: isDark ? Colors.white70 : Colors.grey[600],
+                    height: 1.3,
+                  ),
+                  maxLines: 3,
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ),
+              const SizedBox(height: 8),
+              Wrap(
+                spacing: 4,
+                runSpacing: 4,
+                children: template.defaultTags.take(3).map((tag) {
+                  return Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                    decoration: BoxDecoration(
+                      color: isDark ? Colors.white10 : Colors.grey[100],
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: Text(
+                      '#$tag',
+                      style: TextStyle(
+                        fontSize: 10,
+                        color: isDark ? Colors.white70 : Colors.grey[700],
+                      ),
+                    ),
+                  );
+                }).toList(),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
 class NoteEditorPage extends StatefulWidget {
   final Note? note;
+  final bool isFromTemplate;
 
-  const NoteEditorPage({super.key, this.note});
+  const NoteEditorPage({
+    super.key,
+    this.note,
+    this.isFromTemplate = false,
+  });
 
   @override
   State<NoteEditorPage> createState() => _NoteEditorPageState();
@@ -2708,6 +2946,139 @@ class Note {
       mood: json['mood'] as String? ?? '',
       images: imagesList,
     );
+  }
+}
+
+class NoteTemplate {
+  final String id;
+  final String name;
+  final String description;
+  final String icon;
+  final int color;
+  final String title;
+  final String content;
+  final List<String> defaultTags;
+  final String mood;
+
+  const NoteTemplate({
+    required this.id,
+    required this.name,
+    required this.description,
+    required this.icon,
+    required this.color,
+    required this.title,
+    required this.content,
+    required this.defaultTags,
+    required this.mood,
+  });
+
+  Note createNote() {
+    return Note(
+      id: DateTime.now().millisecondsSinceEpoch.toString(),
+      title: title,
+      content: content,
+      color: color,
+      tags: List<String>.from(defaultTags),
+      createdAt: DateTime.now(),
+      mood: mood,
+    );
+  }
+}
+
+class NoteTemplateService {
+  static const List<NoteTemplate> defaultTemplates = [
+    NoteTemplate(
+      id: 'diary',
+      name: '日记',
+      description: '记录一天的心情和事件',
+      icon: '📔',
+      color: 0xFFFFF5E6,
+      title: '${DateTime.now().year}/${DateTime.now().month}/${DateTime.now().day} 日记',
+      content: '📅 今日日期：\n\n🌤️ 今日心情：\n\n📝 今日收获：\n\n✨ 明日计划：\n',
+      defaultTags: ['日记'],
+      mood: '✨',
+    ),
+    NoteTemplate(
+      id: 'todo',
+      name: '待办事项',
+      description: '记录需要完成的任务',
+      icon: '📋',
+      color: 0xFFF6FFED,
+      title: '待办事项',
+      content: '🔴 紧急事项：\n1. \n2. \n\n🟡 重要事项：\n1. \n2. \n\n🟢 一般事项：\n1. \n2. \n\n✅ 已完成：\n1. \n',
+      defaultTags: ['任务'],
+      mood: '🎯',
+    ),
+    NoteTemplate(
+      id: 'meeting',
+      name: '会议记录',
+      description: '记录会议要点和结论',
+      icon: '📊',
+      color: 0xFFE6F7FF,
+      title: '会议记录',
+      content: '📅 会议时间：\n📍 会议地点：\n👥 参会人员：\n\n📋 会议主题：\n\n🔍 讨论要点：\n1. \n2. \n\n✅ 会议结论：\n1. \n\n📌 下一步行动：\n负责人：    截止日期：\n',
+      defaultTags: ['会议'],
+      mood: '💡',
+    ),
+    NoteTemplate(
+      id: 'study',
+      name: '学习笔记',
+      description: '记录学习内容和心得',
+      icon: '📚',
+      color: 0xFFF0E6FF,
+      title: '学习笔记',
+      content: '📖 学习主题：\n\n📅 学习日期：\n\n📝 知识点：\n1. \n2. \n3. \n\n💡 理解与感悟：\n\n❓ 疑问与不解：\n\n🔗 相关资源：\n',
+      defaultTags: ['学习'],
+      mood: '📚',
+    ),
+    NoteTemplate(
+      id: 'idea',
+      name: '灵感记录',
+      description: '快速记录突然的想法',
+      icon: '💡',
+      color: 0xFFFFE6E6,
+      title: '💡 灵感记录',
+      content: '💡 灵感描述：\n\n🎯 应用场景：\n\n👥 目标用户：\n\n⭐ 核心价值：\n\n🔧 实现方案：\n\n📊 预期效果：\n',
+      defaultTags: ['灵感', '创意'],
+      mood: '💡',
+    ),
+    NoteTemplate(
+      id: 'reading',
+      name: '读书笔记',
+      description: '记录阅读心得和摘要',
+      icon: '📖',
+      color: 0xFFE6FFFF,
+      title: '读书笔记',
+      content: '📚 书名：\n✍️ 作者：\n📅 阅读日期：\n\n📖 章节/页数：\n\n💬 金句摘录：\n\n📝 读后感：\n\n🎯 推荐理由：\n',
+      defaultTags: ['读书'],
+      mood: '📚',
+    ),
+    NoteTemplate(
+      id: 'work',
+      name: '工作日志',
+      description: '记录每日工作内容',
+      icon: '💼',
+      color: 0xFFE6FFE6,
+      title: '工作日志',
+      content: '📅 日期：\n\n📌 今日完成：\n1. \n2. \n3. \n\n🔄 进行中：\n1. \n2. \n\n📋 明日计划：\n1. \n2. \n\n📊 工作反思：\n',
+      defaultTags: ['工作'],
+      mood: '💼',
+    ),
+    NoteTemplate(
+      id: 'health',
+      name: '健康追踪',
+      description: '记录健康状况和生活习惯',
+      icon: '🏃',
+      color: 0xFFF6FFED,
+      title: '健康日志',
+      content: '📅 日期：\n\n😴 睡眠情况：\n⏰ 睡眠时长：  睡眠质量：\n\n🏃 运动情况：\n类型：    时长：\n\n🍎 饮食情况：\n早餐：\n午餐：\n晚餐：\n\n😊 心情状态：\n\n📝 备注：\n',
+      defaultTags: ['健康'],
+      mood: '🏃',
+    ),
+  ];
+
+  static List<NoteTemplate> getTemplates() {
+    return defaultTemplates;
   }
 }
 
