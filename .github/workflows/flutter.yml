@@ -1,0 +1,59 @@
+name: Build Flutter APK
+
+on:
+  push:
+    branches: [ master, main ]
+  pull_request:
+    branches: [ master, main ]
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+    
+    - name: Clone Google Flutter SDK
+      run: |
+        git clone https://github.com/flutter/flutter.git -b stable --depth 1 /opt/flutter
+    
+    - name: Add Flutter to PATH
+      run: echo "/opt/flutter/bin" >> $GITHUB_PATH
+    
+    - name: Install Flutter dependencies
+      run: |
+        flutter precache
+        flutter doctor
+    
+    - name: Get Flutter dependencies
+      run: flutter pub get
+    
+    - name: Build debug APK
+      run: flutter build apk --debug
+    
+    - name: Build release APK
+      run: flutter build apk --release
+    
+    - name: Upload debug APK
+      uses: actions/upload-artifact@v4
+      with:
+        name: debug-apk
+        path: build/app/outputs/flutter-apk/app-debug.apk
+        retention-days: 7
+    
+    - name: Upload release APK
+      uses: actions/upload-artifact@v4
+      with:
+        name: release-apk
+        path: build/app/outputs/flutter-apk/app-release.apk
+        retention-days: 30
+    
+    - name: Upload APK as GitHub Release asset
+      if: startsWith(github.ref, 'refs/tags/')
+      uses: softprops/action-gh-release@v1
+      with:
+        files: build/app/outputs/flutter-apk/app-release.apk
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
