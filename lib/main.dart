@@ -1169,12 +1169,31 @@ class _NoteEditorPageState extends State<NoteEditorPage> with SingleTickerProvid
 
   void _addTag() {
     final tag = _tagController.text.trim();
-    if (tag.isNotEmpty && !_tags.contains(tag)) {
-      setState(() {
-        _tags.add(tag);
-        _tagController.clear();
-      });
+    if (tag.isEmpty) {
+      return;
     }
+    if (_tags.contains(tag)) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('标签 "$tag" 已存在'), duration: const Duration(seconds: 1)),
+      );
+      return;
+    }
+    setState(() {
+      _tags.add(tag);
+      _tagController.clear();
+    });
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text('已添加标签: $tag'), duration: const Duration(seconds: 1)),
+    );
+  }
+
+  void _removeTag(String tag) {
+    setState(() {
+      _tags.remove(tag);
+    });
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text('已删除标签: $tag'), duration: const Duration(seconds: 1)),
+    );
   }
 
   @override
@@ -1243,18 +1262,29 @@ class _NoteEditorPageState extends State<NoteEditorPage> with SingleTickerProvid
                     ),
                     const SizedBox(height: 16),
                     if (_tags.isNotEmpty)
-                      Wrap(
-                        spacing: 8,
-                        runSpacing: 8,
-                        children: _tags.map((tag) {
-                          return Chip(
-                            label: Text(tag),
-                            deleteIcon: const Icon(Icons.close, size: 16),
-                            onDeleted: () {
-                              setState(() => _tags.remove(tag));
-                            },
-                          );
-                        }).toList(),
+                      Padding(
+                        padding: const EdgeInsets.only(bottom: 8),
+                        child: Wrap(
+                          spacing: 8,
+                          runSpacing: 8,
+                          children: _tags.map((tag) {
+                            return Chip(
+                              label: Text(tag, style: const TextStyle(fontSize: 12)),
+                              deleteIcon: Container(
+                                padding: const EdgeInsets.all(2),
+                                decoration: BoxDecoration(
+                                  color: Colors.grey[300],
+                                  borderRadius: BorderRadius.circular(10),
+                                ),
+                                child: const Icon(Icons.close, size: 14, color: Colors.black54),
+                              ),
+                              onDeleted: () => _removeTag(tag),
+                              backgroundColor: Colors.grey[100],
+                              padding: const EdgeInsets.symmetric(horizontal: 4),
+                              materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                            );
+                          }).toList(),
+                        ),
                       ),
                   ],
                 ),
