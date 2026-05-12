@@ -1,8 +1,11 @@
 import 'dart:async';
 import 'dart:convert';
+import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:path_provider/path_provider.dart';
+import 'package:file_picker/file_picker.dart';
 
 void main() {
   WidgetsFlutterBinding.ensureInitialized();
@@ -72,11 +75,10 @@ class _NoteHomePageState extends State<NoteHomePage> with TickerProviderStateMix
   ViewMode _viewMode = ViewMode.grid;
   String _sortBy = 'date';
   final Set<String> _selectedTags = {};
-  final GlobalKey<AnimatedListState> _listKey = GlobalKey<AnimatedListState>();
+  DateTime? _lastBackupDate;
   
   final TextEditingController _searchController = TextEditingController();
   late AnimationController _fabAnimationController;
-  late AnimationController _refreshAnimationController;
 
   @override
   void initState() {
@@ -85,12 +87,52 @@ class _NoteHomePageState extends State<NoteHomePage> with TickerProviderStateMix
       vsync: this,
       duration: const Duration(milliseconds: 300),
     );
-    _refreshAnimationController = AnimationController(
-      vsync: this,
-      duration: const Duration(milliseconds: 800),
-    );
     _loadNotes();
-    _refreshAnimationController.repeat();
+    _checkBackupReminder();
+  }
+
+  Future<void> _checkBackupReminder() async {
+    final prefs = await SharedPreferences.getInstance();
+    final lastBackup = prefs.getString('lastBackupDate');
+    if (lastBackup != null) {
+      _lastBackupDate = DateTime.tryParse(lastBackup);
+    }
+    
+    if (_lastBackupDate == null || 
+        DateTime.now().difference(_lastBackupDate!).inDays >= 7) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        _showBackupReminder();
+      });
+    }
+  }
+
+  void _showBackupReminder() {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Row(
+          children: [
+            Icon(Icons.backup, color: Colors.orange),
+            SizedBox(width: 8),
+            Text('备份提醒'),
+          ],
+        ),
+        content: const Text('您已经超过7天没有备份笔记了，建议定期备份以防止数据丢失。'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('稍后'),
+          ),
+          TextButton(
+            onPressed: () {
+              Navigator.pop(context);
+              _exportNotes();
+            },
+            child: const Text('立即备份'),
+          ),
+        ],
+      ),
+    );
   }
 
   Future<void> _loadNotes() async {
@@ -541,6 +583,39 @@ class _NoteHomePageState extends State<NoteHomePage> with TickerProviderStateMix
             const PopupMenuItem(value: ViewMode.compact, child: Text('⚡ 紧凑视图')),
           ],
         ),
+        PopupMenuButton<String>(
+          icon: Icon(Icons.more_vert, color: isDark ? Colors.white70 : Colors.grey[700]),
+          tooltip: '更多操作',
+          onSelected: (value) async {
+            if (value == 'export') {
+              await _exportNotes();
+            } else if (value == 'import') {
+              await _importNotes();
+            }
+          },
+          itemBuilder: (context) => [
+            const PopupMenuItem(
+              value: 'export',
+              child: Row(
+                children: [
+                  Icon(Icons.upload, color: Colors.green),
+                  SizedBox(width: 8),
+                  Text('📤 导出笔记'),
+                ],
+              ),
+            ),
+            const PopupMenuItem(
+              value: 'import',
+              child: Row(
+                children: [
+                  Icon(Icons.download, color: Colors.blue),
+                  SizedBox(width: 8),
+                  Text('📥 导入笔记'),
+                ],
+              ),
+            ),
+          ],
+        ),
         const SizedBox(width: 8),
       ],
     );
@@ -920,8 +995,101 @@ class _NoteHomePageState extends State<NoteHomePage> with TickerProviderStateMix
   void dispose() {
     _searchController.dispose();
     _fabAnimationController.dispose();
-    _refreshAnimationController.dispose();
     super.dispose();
+  }
+
+  Future<void> _exportNotes() async {
+    try {
+      final directory = await getApplicationDocumentsDirectory();
+      final timestamp = DateTime.now().toIso8601String().replaceAll(':', '-').split('.').first;
+      final fileName = 'yeah_backup_$timestamp.json';
+      final file = File('${directory.path}/$fileName');
+      
+      final exportData = {
+        'version': '5.0.4',
+        'exportDate': DateTime.now().toIso8601String(),
+        'notesCount': _notes.length,
+        'notes': _notes.map((n) => n.toJson()).toList(),
+      };
+      
+      await file.writeAsString(json.encode(exportData));
+      
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setString('lastBackupDate', DateTime.now().toIso8601String());
+      _lastBackupDate = DateTime.now();
+      
+      if (mounted) {
+        _showSnackBar('✅ 导出成功！文件已保存', Icons.check_circle, Colors.green);
+      }
+    } catch (e) {
+      if (mounted) {
+        _showSnackBar('❌ 导出失败：${e.toString()}', Icons.error, Colors.red);
+      }
+    }
+  }
+
+  Future<void> _importNotes() async {
+    try {
+      final result = await FilePicker.platform.pickFiles(
+        type: FileType.custom,
+        allowedExtensions: ['json'],
+      );
+
+      if (result == null || result.files.isEmpty) return;
+
+      final file = File(result.files.single.path!);
+      final content = await file.readAsString();
+      final data = json.decode(content);
+
+      if (!data.containsKey('notes') || data['notes'] == null) {
+        if (mounted) {
+          _showSnackBar('❌ 文件格式错误', Icons.error, Colors.red);
+        }
+        return;
+      }
+
+      final confirmed = await showDialog<bool>(
+        context: context,
+        builder: (context) => AlertDialog(
+          title: const Text('导入笔记'),
+          content: Text('将导入 ${(data['notes'] as List).length} 条笔记。\n\n是否继续？'),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context, false),
+              child: const Text('取消'),
+            ),
+            TextButton(
+              onPressed: () => Navigator.pop(context, true),
+              child: const Text('确定'),
+            ),
+          ],
+        ),
+      );
+
+      if (confirmed != true) return;
+
+      final importedNotes = (data['notes'] as List)
+          .map((json) => Note.fromJson(json))
+          .toList();
+
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setString('lastBackupDate', DateTime.now().toIso8601String());
+      _lastBackupDate = DateTime.now();
+
+      setState(() {
+        _notes.addAll(importedNotes);
+        _applyFilters();
+      });
+      await _saveNotes();
+
+      if (mounted) {
+        _showSnackBar('✅ 成功导入 ${importedNotes.length} 条笔记', Icons.check_circle, Colors.green);
+      }
+    } catch (e) {
+      if (mounted) {
+        _showSnackBar('❌ 导入失败：${e.toString()}', Icons.error, Colors.red);
+      }
+    }
   }
 }
 
