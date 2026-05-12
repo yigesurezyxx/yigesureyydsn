@@ -2155,6 +2155,7 @@ class _NoteEditorPageState extends State<NoteEditorPage> with SingleTickerProvid
                     const SizedBox(height: 8),
                     TextField(
                       controller: _contentController,
+                      focusNode: _contentFocusNode,
                       decoration: InputDecoration(
                         hintText: '开始记录你的想法...',
                         border: InputBorder.none,
@@ -2293,6 +2294,15 @@ class _NoteEditorPageState extends State<NoteEditorPage> with SingleTickerProvid
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
+            if (_showFormattingBar) ...[
+              _buildFormattingToolbar(isDark),
+              const SizedBox(height: 12),
+              Container(
+                height: 1,
+                color: isDark ? Colors.white12 : Colors.grey[200],
+              ),
+              const SizedBox(height: 12),
+            ],
             Row(
               children: [
                 Icon(Icons.label_outline, size: 22, color: isDark ? Colors.white54 : Colors.grey[600]),
@@ -2310,6 +2320,11 @@ class _NoteEditorPageState extends State<NoteEditorPage> with SingleTickerProvid
                     style: TextStyle(color: isDark ? Colors.white : Colors.black87, fontSize: 15),
                     onSubmitted: (_) => _addTag(),
                   ),
+                ),
+                IconButton(
+                  icon: Icon(Icons.image_outlined, size: 26, color: isDark ? Colors.white54 : Colors.grey[600]),
+                  onPressed: _addImage,
+                  tooltip: '添加图片',
                 ),
                 IconButton(
                   icon: Icon(Icons.add_circle, size: 28, color: isDark ? Colors.white54 : const Color(0xFF6366F1)),
@@ -2359,6 +2374,70 @@ class _NoteEditorPageState extends State<NoteEditorPage> with SingleTickerProvid
     );
   }
 
+  Widget _buildFormattingToolbar(bool isDark) {
+    return SingleChildScrollView(
+      scrollDirection: Axis.horizontal,
+      child: Row(
+        children: [
+          _FormatButton(
+            icon: Icons.format_bold,
+            label: '加粗',
+            onTap: () => _applyFormatting('**', '**'),
+            isDark: isDark,
+          ),
+          _FormatButton(
+            icon: Icons.format_italic,
+            label: '斜体',
+            onTap: () => _applyFormatting('*', '*'),
+            isDark: isDark,
+          ),
+          _FormatButton(
+            icon: Icons.format_underline,
+            label: '下划线',
+            onTap: () => _applyFormatting('__', '__'),
+            isDark: isDark,
+          ),
+          Container(
+            width: 1,
+            height: 32,
+            margin: const EdgeInsets.symmetric(horizontal: 8),
+            color: isDark ? Colors.white12 : Colors.grey[300],
+          ),
+          _FormatButton(
+            icon: Icons.format_list_bulleted,
+            label: '列表',
+            onTap: _insertBulletPoint,
+            isDark: isDark,
+          ),
+          _FormatButton(
+            icon: Icons.code,
+            label: '代码',
+            onTap: () => _applyFormatting('`', '`'),
+            isDark: isDark,
+          ),
+          _FormatButton(
+            icon: Icons.quote,
+            label: '引用',
+            onTap: () => _applyFormatting('> ', ''),
+            isDark: isDark,
+          ),
+          Container(
+            width: 1,
+            height: 32,
+            margin: const EdgeInsets.symmetric(horizontal: 8),
+            color: isDark ? Colors.white12 : Colors.grey[300],
+          ),
+          _FormatButton(
+            icon: Icons.link,
+            label: '链接',
+            onTap: () => _applyFormatting('[', '](url)'),
+            isDark: isDark,
+          ),
+        ],
+      ),
+    );
+  }
+
   @override
   void dispose() {
     _titleController.removeListener(_onContentChanged);
@@ -2371,6 +2450,56 @@ class _NoteEditorPageState extends State<NoteEditorPage> with SingleTickerProvid
     _colorAnimationController.dispose();
     _autoSaveTimer?.cancel();
     super.dispose();
+  }
+}
+
+class _FormatButton extends StatelessWidget {
+  final IconData icon;
+  final String label;
+  final VoidCallback onTap;
+  final bool isDark;
+
+  const _FormatButton({
+    required this.icon,
+    required this.label,
+    required this.onTap,
+    required this.isDark,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      margin: const EdgeInsets.symmetric(horizontal: 4),
+      decoration: BoxDecoration(
+        color: isDark ? Colors.white10 : Colors.grey[100],
+        borderRadius: BorderRadius.circular(10),
+      ),
+      child: Material(
+        color: Colors.transparent,
+        child: InkWell(
+          onTap: onTap,
+          borderRadius: BorderRadius.circular(10),
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(icon, size: 20, color: isDark ? Colors.white70 : Colors.grey[700]),
+                const SizedBox(width: 6),
+                Text(
+                  label,
+                  style: TextStyle(
+                    fontSize: 13,
+                    fontWeight: FontWeight.w500,
+                    color: isDark ? Colors.white70 : Colors.grey[700],
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
   }
 }
 
