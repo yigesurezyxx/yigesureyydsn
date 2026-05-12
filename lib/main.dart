@@ -121,6 +121,11 @@ class _NoteHomePageState extends State<NoteHomePage> with TickerProviderStateMix
   String _sortBy = 'date';
   final Set<String> _selectedTags = {};
   DateTime? _lastBackupDate;
+  List<String> _searchHistory = [];
+  DateTime? _filterStartDate;
+  DateTime? _filterEndDate;
+  String? _filterMood;
+  bool _showAdvancedFilters = false;
   
   final TextEditingController _searchController = TextEditingController();
   late AnimationController _fabAnimationController;
@@ -183,14 +188,18 @@ class _NoteHomePageState extends State<NoteHomePage> with TickerProviderStateMix
   Future<void> _loadNotes() async {
     try {
       final notes = await DatabaseService.getAllNotes();
-      setState(() {
-        _notes.clear();
-        _notes.addAll(notes);
-        _applyFilters();
-        _isLoading = false;
-      });
-      if (_notes.isEmpty) {
+      if (notes.isEmpty) {
         _addDemoNotes();
+        setState(() {
+          _isLoading = false;
+        });
+      } else {
+        setState(() {
+          _notes.clear();
+          _notes.addAll(notes);
+          _applyFilters();
+          _isLoading = false;
+        });
       }
     } catch (e) {
       debugPrint('加载笔记失败: $e');
@@ -213,6 +222,51 @@ class _NoteHomePageState extends State<NoteHomePage> with TickerProviderStateMix
         setState(() => _isLoading = false);
       }
     }
+    
+    await _loadSearchHistory();
+  }
+
+  Future<void> _loadSearchHistory() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final history = prefs.getStringList('searchHistory');
+      if (history != null) {
+        setState(() {
+          _searchHistory = history;
+        });
+      }
+    } catch (e) {
+      debugPrint('加载搜索历史失败: $e');
+    }
+  }
+
+  Future<void> _saveSearchHistory() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setStringList('searchHistory', _searchHistory);
+    } catch (e) {
+      debugPrint('保存搜索历史失败: $e');
+    }
+  }
+
+  void _addToSearchHistory(String query) {
+    if (query.isEmpty) return;
+    if (_searchHistory.contains(query)) {
+      _searchHistory.remove(query);
+    }
+    _searchHistory.insert(0, query);
+    if (_searchHistory.length > 10) {
+      _searchHistory = _searchHistory.sublist(0, 10);
+    }
+    _saveSearchHistory();
+  }
+
+  void _clearSearchHistory() {
+    setState(() {
+      _searchHistory.clear();
+    });
+    _saveSearchHistory();
+    _showSnackBar('🗑️ 搜索历史已清除', Icons.delete_sweep, Colors.grey);
   }
 
   void _addDemoNotes() {
@@ -270,16 +324,39 @@ class _NoteHomePageState extends State<NoteHomePage> with TickerProviderStateMix
 
   void _applyFilters() {
     _filteredNotes = _notes.where((note) {
-      final searchLower = _searchQuery.toLowerCase();
-      final matchesSearch = _searchQuery.isEmpty ||
-          note.title.toLowerCase().contains(searchLower) ||
-          note.content.toLowerCase().contains(searchLower) ||
-          note.tags.any((tag) => tag.toLowerCase().contains(searchLower));
+      final searchLower = _searchQuery.toLowerCase().trim();
+      bool matchesSearch = true;
+      
+      if (searchLower.isNotEmpty) {
+        final searchTerms = searchLower.split(' ');
+        matchesSearch = searchTerms.every((term) {
+          if (term.isEmpty) return true;
+          return note.title.toLowerCase().contains(term) ||
+                 note.content.toLowerCase().contains(term) ||
+                 note.tags.any((tag) => tag.toLowerCase().contains(term));
+        });
+      }
       
       final matchesTags = _selectedTags.isEmpty ||
-          note.tags.any((tag) => _selectedTags.contains(tag));
+          _selectedTags.every((tag) => note.tags.contains(tag));
       
-      return matchesSearch && matchesTags;
+      bool matchesDate = true;
+      if (_filterStartDate != null) {
+        matchesDate = matchesDate && 
+          note.createdAt.isAfter(_filterStartDate!) || 
+          note.createdAt.isAtSameMomentAs(_filterStartDate!);
+      }
+      if (_filterEndDate != null) {
+        matchesDate = matchesDate && 
+          note.createdAt.isBefore(_filterEndDate!.add(const Duration(days: 1)));
+      }
+      
+      bool matchesMood = true;
+      if (_filterMood != null && _filterMood!.isNotEmpty) {
+        matchesMood = note.mood == _filterMood;
+      }
+      
+      return matchesSearch && matchesTags && matchesDate && matchesMood;
     }).toList();
 
     switch (_sortBy) {
@@ -297,6 +374,32 @@ class _NoteHomePageState extends State<NoteHomePage> with TickerProviderStateMix
         });
         break;
     }
+  }
+
+  void _onSearchChanged(String value) {
+    setState(() {
+      _searchQuery = value;
+      _applyFilters();
+    });
+  }
+
+  void _onSearchSubmitted(String value) {
+    if (value.isNotEmpty) {
+      _addToSearchHistory(value);
+    }
+  }
+
+  void _clearFilters() {
+    setState(() {
+      _searchQuery = '';
+      _searchController.clear();
+      _selectedTags.clear();
+      _filterStartDate = null;
+      _filterEndDate = null;
+      _filterMood = null;
+      _applyFilters();
+    });
+    _showSnackBar('🔄 筛选条件已清除', Icons.filter_alt_off, Colors.blue);
   }
 
   Set<String> get _allTags {
