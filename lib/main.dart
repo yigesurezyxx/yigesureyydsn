@@ -6,6 +6,9 @@ import 'package:flutter/services.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:file_picker/file_picker.dart';
+import 'package:sqflite/sqflite.dart';
+import 'package:image_picker/image_picker.dart';
+import 'package:path/path.dart' as path;
 
 void main() {
   WidgetsFlutterBinding.ensureInitialized();
@@ -137,22 +140,36 @@ class _NoteHomePageState extends State<NoteHomePage> with TickerProviderStateMix
 
   Future<void> _loadNotes() async {
     try {
-      final prefs = await SharedPreferences.getInstance();
-      final notesJson = prefs.getString('notes');
-      if (notesJson != null && notesJson.isNotEmpty) {
-        final List<dynamic> notesList = json.decode(notesJson);
-        setState(() {
-          _notes.addAll(notesList.map((json) => Note.fromJson(json)));
-          _applyFilters();
-          _isLoading = false;
-        });
-      } else {
+      final notes = await DatabaseService.getAllNotes();
+      setState(() {
+        _notes.clear();
+        _notes.addAll(notes);
+        _applyFilters();
+        _isLoading = false;
+      });
+      if (_notes.isEmpty) {
+        _addDemoNotes();
+      }
+    } catch (e) {
+      debugPrint('加载笔记失败: $e');
+      try {
+        final prefs = await SharedPreferences.getInstance();
+        final notesJson = prefs.getString('notes');
+        if (notesJson != null && notesJson.isNotEmpty) {
+          final List<dynamic> notesList = json.decode(notesJson);
+          setState(() {
+            _notes.addAll(notesList.map((json) => Note.fromJson(json)));
+            _applyFilters();
+            _isLoading = false;
+          });
+        } else {
+          _addDemoNotes();
+          setState(() => _isLoading = false);
+        }
+      } catch (e2) {
         _addDemoNotes();
         setState(() => _isLoading = false);
       }
-    } catch (e) {
-      _addDemoNotes();
-      setState(() => _isLoading = false);
     }
   }
 
@@ -194,11 +211,18 @@ class _NoteHomePageState extends State<NoteHomePage> with TickerProviderStateMix
 
   Future<void> _saveNotes() async {
     try {
-      final prefs = await SharedPreferences.getInstance();
-      final notesJson = json.encode(_notes.map((n) => n.toJson()).toList());
-      await prefs.setString('notes', notesJson);
+      for (final note in _notes) {
+        await DatabaseService.insertNote(note);
+      }
     } catch (e) {
       debugPrint('保存笔记失败: $e');
+      try {
+        final prefs = await SharedPreferences.getInstance();
+        final notesJson = json.encode(_notes.map((n) => n.toJson()).toList());
+        await prefs.setString('notes', notesJson);
+      } catch (e2) {
+        debugPrint('备用保存失败: $e2');
+      }
     }
   }
 
@@ -278,13 +302,17 @@ class _NoteHomePageState extends State<NoteHomePage> with TickerProviderStateMix
         },
         transitionDuration: const Duration(milliseconds: 400),
       ),
-    ).then((newNote) {
+    ).then((newNote) async {
       if (newNote != null && newNote is Note) {
+        try {
+          await DatabaseService.insertNote(newNote);
+        } catch (e) {
+          debugPrint('数据库插入失败: $e');
+        }
         setState(() {
           _notes.insert(0, newNote);
           _applyFilters();
         });
-        _saveNotes();
         _showSnackBar('✨ 笔记已创建', Icons.check_circle, Colors.green);
       }
     });
@@ -308,8 +336,13 @@ class _NoteHomePageState extends State<NoteHomePage> with TickerProviderStateMix
         },
         transitionDuration: const Duration(milliseconds: 300),
       ),
-    ).then((updatedNote) {
+    ).then((updatedNote) async {
       if (updatedNote != null && updatedNote is Note) {
+        try {
+          await DatabaseService.updateNote(updatedNote);
+        } catch (e) {
+          debugPrint('数据库更新失败: $e');
+        }
         setState(() {
           final index = _notes.indexWhere((n) => n.id == updatedNote.id);
           if (index != -1) {
@@ -317,7 +350,6 @@ class _NoteHomePageState extends State<NoteHomePage> with TickerProviderStateMix
             _applyFilters();
           }
         });
-        _saveNotes();
         _showSnackBar('📝 笔记已更新', Icons.edit, Colors.blue);
       }
     });
@@ -352,7 +384,28 @@ class _NoteHomePageState extends State<NoteHomePage> with TickerProviderStateMix
       _notes.removeWhere((n) => n.id == note.id);
       _applyFilters();
     });
-    _saveNotes();
+    
+    try {
+      await DatabaseService.deleteNote(note.id);
+    } catch (e) {
+      debugPrint('数据库删除失败: $e');
+    }
+    
+    try {
+      for (final imagePath in note.images) {
+        await DatabaseService.deleteImage(imagePath);
+      }
+    } catch (e) {
+      debugPrint('删除图片失败: $e');
+    }
+    
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final notesJson = json.encode(_notes.map((n) => n.toJson()).toList());
+      await prefs.setString('notes', notesJson);
+    } catch (e) {
+      debugPrint('备用保存失败: $e');
+    }
     
     if (mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -368,13 +421,13 @@ class _NoteHomePageState extends State<NoteHomePage> with TickerProviderStateMix
           action: SnackBarAction(
             label: '撤销',
             textColor: Colors.white,
-            onPressed: () {
+            onPressed: () async {
               if (mounted) {
                 setState(() {
                   _notes.insert(originalIndex.clamp(0, _notes.length), deletedNote);
                   _applyFilters();
                 });
-                _saveNotes();
+                await _saveNotes();
                 _showSnackBar('笔记已恢复', Icons.restore, Colors.green);
               }
             },
@@ -1068,9 +1121,25 @@ class _NoteHomePageState extends State<NoteHomePage> with TickerProviderStateMix
 
       if (confirmed != true) return;
 
-      final importedNotes = (data['notes'] as List)
-          .map((json) => Note.fromJson(json))
-          .toList();
+      final importedNotes = (data['notes'] as List).map((json) {
+        final oldNote = Note.fromJson(json);
+        final newId = '${DateTime.now().millisecondsSinceEpoch}_${oldNote.id}';
+        return Note(
+          id: newId,
+          title: oldNote.title,
+          content: oldNote.content,
+          color: oldNote.color,
+          tags: oldNote.tags,
+          createdAt: oldNote.createdAt,
+          isFavorite: false,
+          mood: oldNote.mood,
+          images: oldNote.images,
+        );
+      }).toList();
+
+      for (final note in importedNotes) {
+        await DatabaseService.insertNote(note);
+      }
 
       final prefs = await SharedPreferences.getInstance();
       await prefs.setString('lastBackupDate', DateTime.now().toIso8601String());
@@ -1080,7 +1149,6 @@ class _NoteHomePageState extends State<NoteHomePage> with TickerProviderStateMix
         _notes.addAll(importedNotes);
         _applyFilters();
       });
-      await _saveNotes();
 
       if (mounted) {
         _showSnackBar('✅ 成功导入 ${importedNotes.length} 条笔记', Icons.check_circle, Colors.green);
@@ -2161,6 +2229,7 @@ class Note {
   final DateTime createdAt;
   final bool isFavorite;
   final String mood;
+  final List<String> images;
 
   Note({
     required this.id,
@@ -2171,6 +2240,7 @@ class Note {
     required this.createdAt,
     this.isFavorite = false,
     this.mood = '',
+    this.images = const [],
   });
 
   Note copyWith({
@@ -2182,6 +2252,7 @@ class Note {
     DateTime? createdAt,
     bool? isFavorite,
     String? mood,
+    List<String>? images,
   }) {
     return Note(
       id: id ?? this.id,
@@ -2192,6 +2263,7 @@ class Note {
       createdAt: createdAt ?? this.createdAt,
       isFavorite: isFavorite ?? this.isFavorite,
       mood: mood ?? this.mood,
+      images: images ?? this.images,
     );
   }
 
@@ -2204,18 +2276,207 @@ class Note {
         'createdAt': createdAt.toIso8601String(),
         'isFavorite': isFavorite,
         'mood': mood,
+        'images': images,
       };
 
-  factory Note.fromJson(Map<String, dynamic> json) => Note(
-        id: json['id'] as String? ?? DateTime.now().millisecondsSinceEpoch.toString(),
-        title: json['title'] as String? ?? '',
-        content: json['content'] as String? ?? '',
-        color: json['color'] as int? ?? 0xFFFFF5E6,
-        tags: (json['tags'] as List<dynamic>?)?.map((e) => e as String).toList() ?? [],
-        createdAt: json['createdAt'] != null ? DateTime.tryParse(json['createdAt']) ?? DateTime.now() : DateTime.now(),
-        isFavorite: json['isFavorite'] as bool? ?? false,
-        mood: json['mood'] as String? ?? '',
-      );
+  factory Note.fromJson(Map<String, dynamic> json) {
+    List<String> tagsList = [];
+    if (json['tags'] is String) {
+      try {
+        tagsList = List<String>.from(jsonDecode(json['tags']));
+      } catch (e) {
+        tagsList = [];
+      }
+    } else if (json['tags'] is List) {
+      tagsList = List<String>.from(json['tags']);
+    }
+    
+    List<String> imagesList = [];
+    if (json['images'] is String) {
+      try {
+        imagesList = List<String>.from(jsonDecode(json['images']));
+      } catch (e) {
+        imagesList = [];
+      }
+    } else if (json['images'] is List) {
+      imagesList = List<String>.from(json['images']);
+    }
+    
+    return Note(
+      id: json['id'] as String? ?? DateTime.now().millisecondsSinceEpoch.toString(),
+      title: json['title'] as String? ?? '',
+      content: json['content'] as String? ?? '',
+      color: json['color'] as int? ?? 0xFFFFF5E6,
+      tags: tagsList,
+      createdAt: json['createdAt'] != null ? DateTime.tryParse(json['createdAt']) ?? DateTime.now() : DateTime.now(),
+      isFavorite: json['isFavorite'] == 1 || json['isFavorite'] == true,
+      mood: json['mood'] as String? ?? '',
+      images: imagesList,
+    );
+  }
 }
 
 enum ViewMode { grid, list, compact }
+
+class DatabaseService {
+  static Database? _database;
+  
+  static Future<Database> get database async {
+    if (_database != null) return _database!;
+    _database = await _initDatabase();
+    return _database!;
+  }
+  
+  static Future<Database> _initDatabase() async {
+    final dbPath = await getDatabasesPath();
+    final path = '$dbPath/yeah_notes.db';
+    
+    return await openDatabase(
+      path,
+      version: 1,
+      onCreate: (db, version) async {
+        await db.execute('''
+          CREATE TABLE notes (
+            id TEXT PRIMARY KEY,
+            title TEXT,
+            content TEXT,
+            color INTEGER,
+            tags TEXT,
+            createdAt TEXT,
+            isFavorite INTEGER,
+            mood TEXT,
+            images TEXT,
+            updatedAt TEXT
+          )
+        ''');
+        
+        await db.execute('''
+          CREATE TABLE note_versions (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            noteId TEXT,
+            title TEXT,
+            content TEXT,
+            color INTEGER,
+            tags TEXT,
+            mood TEXT,
+            versionNumber INTEGER,
+            createdAt TEXT,
+            FOREIGN KEY (noteId) REFERENCES notes(id)
+          )
+        ''');
+        
+        await db.execute('''
+          CREATE TABLE images (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            noteId TEXT,
+            imagePath TEXT,
+            createdAt TEXT,
+            FOREIGN KEY (noteId) REFERENCES notes(id)
+          )
+        ''');
+      },
+    );
+  }
+  
+  static Future<void> insertNote(Note note) async {
+    final db = await database;
+    await db.insert(
+      'notes',
+      {
+        'id': note.id,
+        'title': note.title,
+        'content': note.content,
+        'color': note.color,
+        'tags': json.encode(note.tags),
+        'createdAt': note.createdAt.toIso8601String(),
+        'isFavorite': note.isFavorite ? 1 : 0,
+        'mood': note.mood,
+        'images': json.encode(note.images),
+        'updatedAt': DateTime.now().toIso8601String(),
+      },
+      conflictAlgorithm: ConflictAlgorithm.replace,
+    );
+  }
+  
+  static Future<void> updateNote(Note note) async {
+    final db = await database;
+    final versions = await getNoteVersions(note.id);
+    final versionNumber = versions.length + 1;
+    
+    await db.insert('note_versions', {
+      'noteId': note.id,
+      'title': note.title,
+      'content': note.content,
+      'color': note.color,
+      'tags': json.encode(note.tags),
+      'mood': note.mood,
+      'versionNumber': versionNumber,
+      'createdAt': DateTime.now().toIso8601String(),
+    });
+    
+    await db.update(
+      'notes',
+      {
+        'title': note.title,
+        'content': note.content,
+        'color': note.color,
+        'tags': json.encode(note.tags),
+        'mood': note.mood,
+        'images': json.encode(note.images),
+        'isFavorite': note.isFavorite ? 1 : 0,
+        'updatedAt': DateTime.now().toIso8601String(),
+      },
+      where: 'id = ?',
+      whereArgs: [note.id],
+    );
+  }
+  
+  static Future<void> deleteNote(String id) async {
+    final db = await database;
+    await db.delete('notes', where: 'id = ?', whereArgs: [id]);
+    await db.delete('note_versions', where: 'noteId = ?', whereArgs: [id]);
+    await db.delete('images', where: 'noteId = ?', whereArgs: [id]);
+  }
+  
+  static Future<List<Note>> getAllNotes() async {
+    final db = await database;
+    final maps = await db.query('notes', orderBy: 'createdAt DESC');
+    return maps.map((map) => Note.fromJson(map)).toList();
+  }
+  
+  static Future<List<Map<String, dynamic>>> getNoteVersions(String noteId) async {
+    final db = await database;
+    return await db.query(
+      'note_versions',
+      where: 'noteId = ?',
+      whereArgs: [noteId],
+      orderBy: 'versionNumber DESC',
+    );
+  }
+  
+  static Future<void> insertImage(String noteId, String imagePath) async {
+    final db = await database;
+    await db.insert('images', {
+      'noteId': noteId,
+      'imagePath': imagePath,
+      'createdAt': DateTime.now().toIso8601String(),
+    });
+  }
+  
+  static Future<List<String>> getNoteImages(String noteId) async {
+    final db = await database;
+    final maps = await db.query(
+      'images',
+      where: 'noteId = ?',
+      whereArgs: [noteId],
+    );
+    return maps.map((map) => map['imagePath'] as String).toList();
+  }
+  
+  static Future<void> deleteImage(String imagePath) async {
+    final file = File(imagePath);
+    if (await file.exists()) {
+      await file.delete();
+    }
+  }
+}
