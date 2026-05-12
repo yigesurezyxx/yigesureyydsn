@@ -1,5 +1,10 @@
-import 'dart:math';
+import 'dart:async';
+import 'dart:convert';
+import 'dart:io';
+import 'package:flutter/foundation.dart';
+import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 void main() {
@@ -13,270 +18,211 @@ class YeahApp extends StatelessWidget {
   Widget build(BuildContext context) {
     return MaterialApp(
       title: 'yeah',
-      debugShowCheckedModeBanner: false,
       theme: ThemeData(
-        colorScheme: const ColorScheme.light(
-          primary: Color(0xFF111111),
-          surface: Color(0xFFFAFAFA),
-        ),
+        primaryColor: const Color(0xFF6366F1),
         scaffoldBackgroundColor: const Color(0xFFFAFAFA),
-        fontFamily: 'Inter',
+        visualDensity: VisualDensity.adaptivePlatformDensity,
       ),
-      home: const NotesHome(),
+      home: const NoteHomePage(),
+      debugShowCheckedModeBanner: false,
     );
   }
 }
 
-class Note {
-  final String id;
-  final String content;
-  final int colorIndex;
-  final DateTime createdAt;
-  final List<String> relatedNoteIds;
-
-  Note({
-    required this.id,
-    required this.content,
-    this.colorIndex = 0,
-    required this.createdAt,
-    this.relatedNoteIds = const [],
-  });
-
-  Note copyWith({
-    String? content,
-    int? colorIndex,
-    List<String>? relatedNoteIds,
-  }) {
-    return Note(
-      id: id,
-      content: content ?? this.content,
-      colorIndex: colorIndex ?? this.colorIndex,
-      createdAt: createdAt,
-      relatedNoteIds: relatedNoteIds ?? this.relatedNoteIds,
-    );
-  }
-
-  Map<String, dynamic> toJson() {
-    return {
-      'id': id,
-      'content': content,
-      'colorIndex': colorIndex,
-      'createdAt': createdAt.toIso8601String(),
-      'relatedNoteIds': relatedNoteIds.join('|'),
-    };
-  }
-
-  static Note fromJson(Map<String, dynamic> json) {
-    return Note(
-      id: json['id'],
-      content: json['content'],
-      colorIndex: (json['colorIndex'] ?? 0) is int
-          ? json['colorIndex']
-          : int.tryParse(json['colorIndex'].toString()) ?? 0,
-      createdAt: DateTime.parse(json['createdAt']),
-      relatedNoteIds:
-          json['relatedNoteIds']?.toString().isNotEmpty == true
-              ? (json['relatedNoteIds'] as String).split('|')
-              : [],
-    );
-  }
-}
-
-const List<Color> noteColors = [
-  Color(0xFFFAFAFA),
-  Color(0xFFFDF4EB),
-  Color(0xFFF2F7FE),
-  Color(0xFFF3F4F6),
-  Color(0xFFF4F2FF),
-];
-
-class NotesHome extends StatefulWidget {
-  const NotesHome({super.key});
+class NoteHomePage extends StatefulWidget {
+  const NoteHomePage({super.key});
 
   @override
-  State<NotesHome> createState() => _NotesHomeState();
+  State<NoteHomePage> createState() => _NoteHomePageState();
 }
 
-class _NotesHomeState extends State<NotesHome> {
-  List<Note> notes = [];
-  bool isLoading = true;
-  final ScrollController scrollController = ScrollController();
-  String? focusedNoteId;
+class _NoteHomePageState extends State<NoteHomePage> {
+  final List<Note> _notes = [];
+  String _searchQuery = '';
+  bool _isLoading = true;
+  String _deviceModel = '';
+  final PageController _pageController = PageController();
+  int _currentPage = 0;
+  final double _scaleFactor = 1.0;
+  final GlobalKey<ScaffoldState> _scaffoldKey = GlobalKey<ScaffoldState>();
 
   @override
   void initState() {
     super.initState();
     _loadNotes();
+    _getDeviceInfo();
   }
 
   Future<void> _loadNotes() async {
     final prefs = await SharedPreferences.getInstance();
-    final notesJson = prefs.getStringList('notes') ?? [];
-    setState(() {
-      notes = notesJson.map((json) => Note.fromJson(Map.fromIterable(
-            json.split('|||'),
-            key: (e) => e.split('==')[0],
-            value: (e) => e.split('==')[1],
-          ))).toList();
-      if (notes.isEmpty) {
-        notes = [
-          Note(
-            id: '1',
-            content: '欢迎使用 yeah\n\n在这里，你的想法会自然地关联在一起。写了新东西后，系统会提示你相关的旧笔记。',
-            colorIndex: 1,
-            createdAt: DateTime.now(),
-          ),
-          Note(
-            id: '2',
-            content: '试试长按笔记卡片，你会看到一些有趣的功能。',
-            colorIndex: 2,
-            createdAt: DateTime.now().subtract(const Duration(minutes: 5)),
-            relatedNoteIds: ['1'],
-          ),
-        ];
-      }
-      isLoading = false;
-    });
-  }
-
-  Future<void> _saveNotes(List<Note> notesToSave) async {
-    final prefs = await SharedPreferences.getInstance();
-    final notesJson = notesToSave.map((note) {
-      return [
-        'id==${note.id}',
-        'content==${note.content}',
-        'colorIndex==${note.colorIndex}',
-        'createdAt==${note.createdAt.toIso8601String()}',
-        'relatedNoteIds==${note.relatedNoteIds.join('|')}',
-      ].join('|||');
-    }).toList();
-    await prefs.setStringList('notes', notesJson);
-  }
-
-  List<Note> _findRelatedNotes(Note currentNote) {
-    final keywords = _extractKeywords(currentNote.content);
-    final related = notes.where((note) {
-      if (note.id == currentNote.id) return false;
-      final noteKeywords = _extractKeywords(note.content);
-      return keywords.any((k) => noteKeywords.contains(k));
-    }).toList();
-    related.sort((a, b) => b.createdAt.compareTo(a.createdAt));
-    return related.take(3).toList();
-  }
-
-  List<String> _extractKeywords(String content) {
-    final words = content
-        .toLowerCase()
-        .replaceAll(RegExp(r'[^\w\s]'), '')
-        .split(RegExp(r'\s+'))
-        .where((w) => w.length > 2)
-        .toList();
-    final wordCount = <String, int>{};
-    for (final word in words) {
-      wordCount[word] = (wordCount[word] ?? 0) + 1;
+    final notesJson = prefs.getString('notes');
+    if (notesJson != null) {
+      final List<dynamic> notesList = json.decode(notesJson);
+      setState(() {
+        _notes.addAll(notesList.map((json) => Note.fromJson(json)));
+        _isLoading = false;
+      });
+    } else {
+      _addDemoNotes();
+      setState(() => _isLoading = false);
     }
-    return wordCount.entries
-        .where((e) => e.value > 0)
-        .map((e) => e.key)
-        .take(5)
-        .toList();
+  }
+
+  void _addDemoNotes() {
+    _notes.addAll([
+      Note(id: '1', content: '今天的想法：创新是改变世界的力量', color: 0xFFFFF5E6, createdAt: DateTime.now().subtract(const Duration(hours: 1))),
+      Note(id: '2', content: '设计原则：少即是多', color: 0xFFE6F7FF, createdAt: DateTime.now().subtract(const Duration(hours: 3))),
+      Note(id: '3', content: '用户体验比功能更重要', color: 0xFFF6FFED, createdAt: DateTime.now().subtract(const Duration(days: 1))),
+    ]);
+    _saveNotes();
+  }
+
+  Future<void> _saveNotes() async {
+    final prefs = await SharedPreferences.getInstance();
+    final notesJson = json.encode(_notes.map((n) => n.toJson()).toList());
+    await prefs.setString('notes', notesJson);
+  }
+
+  Future<void> _getDeviceInfo() async {
+    try {
+      const platform = MethodChannel('com.example.yeah/native');
+      final result = await platform.invokeMethod('getDeviceInfo');
+      setState(() {
+        _deviceModel = result['model'] ?? '';
+      });
+    } on PlatformException catch (e) {
+      debugPrint("Failed to get device info: ${e.message}");
+    }
   }
 
   void _addNote() {
     Navigator.push(
       context,
       PageRouteBuilder(
-        pageBuilder: (_, __, ___) => NoteEditor(
-          onRelatedNotes: _findRelatedNotes,
-        ),
+        pageBuilder: (_, __, ___) => const NoteEditorPage(),
         transitionsBuilder: (_, animation, __, child) {
-          return SlideTransition(
-            position: Tween(
-              begin: const Offset(0, 1),
-              end: Offset.zero,
-            ).animate(animation),
+          return ScaleTransition(
+            scale: animation.drive(Tween(begin: 0.9, end: 1.0)),
             child: child,
           );
         },
-        transitionDuration: const Duration(milliseconds: 250),
       ),
     ).then((newNote) {
       if (newNote != null && newNote is Note) {
         setState(() {
-          notes.insert(0, newNote);
-          _saveNotes(notes);
+          _notes.insert(0, newNote);
         });
-        _scrollToTop();
+        _saveNotes();
       }
     });
   }
 
-  void _scrollToTop() {
-    Future.delayed(const Duration(milliseconds: 100), () {
-      if (scrollController.hasClients) {
-        scrollController.animateTo(
-          0,
-          duration: const Duration(milliseconds: 300),
-          curve: Curves.easeOut,
-        );
+  void _editNote(Note note) {
+    Navigator.push(
+      context,
+      PageRouteBuilder(
+        pageBuilder: (_, __, ___) => NoteEditorPage(note: note),
+        transitionsBuilder: (_, animation, __, child) {
+          return ScaleTransition(
+            scale: animation.drive(Tween(begin: 0.9, end: 1.0)),
+            child: child,
+          );
+        },
+      ),
+    ).then((updatedNote) {
+      if (updatedNote != null && updatedNote is Note) {
+        setState(() {
+          final index = _notes.indexWhere((n) => n.id == updatedNote.id);
+          if (index != -1) {
+            _notes[index] = updatedNote;
+          }
+        });
+        _saveNotes();
       }
     });
   }
 
   void _deleteNote(String id) {
     setState(() {
-      notes.removeWhere((n) => n.id == id);
-      _saveNotes(notes);
+      _notes.removeWhere((n) => n.id == id);
     });
+    _saveNotes();
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text('笔记已删除')),
+    );
   }
 
-  void _toggleFocus(Note note) {
-    setState(() {
-      focusedNoteId = focusedNoteId == note.id ? null : note.id;
-    });
+  List<Note> _filteredNotes() {
+    if (_searchQuery.isEmpty) return _notes;
+    return _notes.where((note) =>
+      note.content.toLowerCase().contains(_searchQuery.toLowerCase())
+    ).toList();
+  }
+
+  String _formatTime(DateTime date) {
+    final now = DateTime.now();
+    final diff = now.difference(date);
+    
+    if (diff.inMinutes < 1) return '刚刚';
+    if (diff.inMinutes < 60) return '${diff.inMinutes}分钟前';
+    if (diff.inHours < 24) return '${diff.inHours}小时前';
+    if (diff.inDays < 7) return '${diff.inDays}天前';
+    return '${date.month}/${date.day}';
   }
 
   @override
   Widget build(BuildContext context) {
+    final filteredNotes = _filteredNotes();
+    
     return Scaffold(
+      key: _scaffoldKey,
       backgroundColor: const Color(0xFFFAFAFA),
-      body: SafeArea(
-        child: Column(
-          children: [
-            _buildHeader(),
-            Expanded(
-              child: isLoading
-                  ? const Center(child: CircularProgressIndicator(color: Color(0xFF111111)))
-                  : _buildNotesList(),
+      body: _isLoading
+          ? const Center(child: CircularProgressIndicator())
+          : Column(
+              children: [
+                _buildHeader(),
+                _buildSearchBar(),
+                _buildQuickActions(),
+                Expanded(child: _buildNoteGrid(filteredNotes)),
+              ],
             ),
-          ],
-        ),
-      ),
       floatingActionButton: _buildFab(),
     );
   }
 
   Widget _buildHeader() {
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(20, 24, 20, 8),
-      child: Row(
+    return Container(
+      padding: const EdgeInsets.only(top: 60, left: 20, right: 20, bottom: 15),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(
-            'yeah',
-            style: TextStyle(
-              fontSize: 32,
-              fontWeight: FontWeight.w900,
-              color: Colors.grey[900],
-              letterSpacing: -2,
-            ),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              const Text(
+                'yeah',
+                style: TextStyle(
+                  fontSize: 32,
+                  fontWeight: FontWeight.w700,
+                  color: Color(0xFF1A1A1A),
+                ),
+              ),
+              Text(
+                '${_notes.length} 条',
+                style: TextStyle(
+                  fontSize: 14,
+                  color: Colors.grey[500],
+                ),
+              ),
+            ],
           ),
-          const Spacer(),
-          Text(
-            '${notes.length} notes',
+          const SizedBox(height: 4),
+          const Text(
+            '记录每一个灵感',
             style: TextStyle(
               fontSize: 14,
-              color: Colors.grey[500],
-              fontWeight: FontWeight.w500,
+              color: Color(0xFF999999),
             ),
           ),
         ],
@@ -284,281 +230,255 @@ class _NotesHomeState extends State<NotesHome> {
     );
   }
 
-  Widget _buildNotesList() {
+  Widget _buildSearchBar() {
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 20),
+      child: Container(
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(12),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.grey[100]!,
+              blurRadius: 4,
+              offset: const Offset(0, 2),
+            ),
+          ],
+        ),
+        child: TextField(
+          onChanged: (value) => setState(() => _searchQuery = value),
+          decoration: const InputDecoration(
+            hintText: '搜索笔记...',
+            prefixIcon: Icon(Icons.search, color: Color(0xFFCCCCCC)),
+            border: InputBorder.none,
+            contentPadding: EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildQuickActions() {
+    return Padding(
+      padding: const EdgeInsets.only(top: 16, left: 20, right: 20),
+      child: SingleChildScrollView(
+        scrollDirection: Axis.horizontal,
+        child: Row(
+          children: [
+            _ActionChip(label: '全部', active: _searchQuery.isEmpty),
+            _ActionChip(label: '今天', active: _searchQuery == '今天'),
+            _ActionChip(label: '本周', active: _searchQuery == '本周'),
+            _ActionChip(label: '本月', active: _searchQuery == '本月'),
+            _ActionChip(label: '想法', active: _searchQuery == '想法'),
+            _ActionChip(label: '待办', active: _searchQuery == '待办'),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildNoteGrid(List<Note> notes) {
     if (notes.isEmpty) {
-      return Center(
+      return const Center(
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Icon(
-              Icons.edit_note_outlined,
-              size: 48,
-              color: Colors.grey[300],
-            ),
-            const SizedBox(height: 16),
+            Icon(Icons.lightbulb_outline, size: 48, color: Color(0xFFDDDDDD)),
+            SizedBox(height: 16),
             Text(
-              '开始写点什么',
-              style: TextStyle(
-                fontSize: 16,
-                color: Colors.grey[400],
-              ),
+              '还没有笔记',
+              style: TextStyle(color: Color(0xFF999999)),
+            ),
+            Text(
+              '点击下方按钮开始记录',
+              style: TextStyle(color: Color(0xFFBBBBBB), fontSize: 12),
             ),
           ],
         ),
       );
     }
 
-    return ListView.builder(
-      controller: scrollController,
-      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
-      reverse: true,
+    return GridView.builder(
+      padding: const EdgeInsets.all(20),
+      gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+        crossAxisCount: 2,
+        crossAxisSpacing: 12,
+        mainAxisSpacing: 12,
+        childAspectRatio: 0.85,
+      ),
       itemCount: notes.length,
       itemBuilder: (context, index) {
-        final note = notes[index];
-        final isFocused = focusedNoteId == note.id;
-        final relatedNotes = isFocused ? _findRelatedNotes(note) : <Note>[];
-        
-        return Column(
-          children: [
-            NoteCard(
-              note: note,
-              onTap: () => _openNote(note),
-              onDelete: () => _deleteNote(note.id),
-              onFocus: () => _toggleFocus(note),
-              isFocused: isFocused,
-            ),
-            if (isFocused && relatedNotes.isNotEmpty)
-              _buildRelatedNotes(note, relatedNotes),
-          ],
+        return _NoteCard(
+          note: notes[index],
+          onTap: () => _editNote(notes[index]),
+          onLongPress: () => _showDeleteDialog(notes[index]),
         );
       },
     );
   }
 
-  Widget _buildRelatedNotes(Note currentNote, List<Note> relatedNotes) {
-    return Container(
-      margin: const EdgeInsets.only(left: 40, bottom: 12),
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: const Color(0xFF111111),
-        borderRadius: BorderRadius.circular(16),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              const Icon(
-                Icons.auto_awesome,
-                color: Color(0xFFD4D4D4),
-                size: 18,
-              ),
-              const SizedBox(width: 8),
-              Text(
-                '相关发现',
-                style: TextStyle(
-                  fontSize: 13,
-                  fontWeight: FontWeight.w600,
-                  color: Colors.grey[300],
-                ),
-              ),
-            ],
+  void _showDeleteDialog(Note note) {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('删除笔记'),
+        content: const Text('确定要删除这条笔记吗？'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('取消'),
           ),
-          const SizedBox(height: 12),
-          ...relatedNotes.map((related) {
-            return GestureDetector(
-              onTap: () => _openNote(related),
-              child: Padding(
-                padding: const EdgeInsets.only(bottom: 10),
-                child: Text(
-                  related.content,
-                  style: TextStyle(
-                    fontSize: 14,
-                    color: Colors.white.withOpacity(0.85),
-                    height: 1.5,
-                  ),
-                  maxLines: 2,
-                  overflow: TextOverflow.ellipsis,
-                ),
-              ),
-            );
-          }).toList(),
+          TextButton(
+            onPressed: () {
+              Navigator.pop(context);
+              _deleteNote(note.id);
+            },
+            child: const Text('删除', style: TextStyle(color: Colors.red)),
+          ),
         ],
       ),
     );
   }
 
-  void _openNote(Note note) {
-    Navigator.push(
-      context,
-      PageRouteBuilder(
-        pageBuilder: (_, __, ___) => NoteEditor(
-          note: note,
-          onRelatedNotes: _findRelatedNotes,
+  Widget _buildFab() {
+    return GestureDetector(
+      onTap: _addNote,
+      child: Container(
+        width: 64,
+        height: 64,
+        decoration: BoxDecoration(
+          gradient: const LinearGradient(
+            colors: [Color(0xFF6366F1), Color(0xFF8B5CF6)],
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+          ),
+          borderRadius: BorderRadius.circular(20),
+          boxShadow: [
+            BoxShadow(
+              color: const Color(0xFF6366F1).withOpacity(0.3),
+              blurRadius: 10,
+              offset: const Offset(0, 4),
+            ),
+          ],
         ),
-        transitionsBuilder: (_, animation, __, child) {
-          return SlideTransition(
-            position: Tween(
-              begin: const Offset(0, 1),
-              end: Offset.zero,
-            ).animate(animation),
-            child: child,
-          );
-        },
-        transitionDuration: const Duration(milliseconds: 250),
+        child: const Icon(Icons.add, color: Colors.white, size: 28),
       ),
-    ).then((updatedNote) {
-      if (updatedNote != null && updatedNote is Note) {
-        setState(() {
-          final idx = notes.indexWhere((n) => n.id == updatedNote.id);
-          if (idx != -1) {
-            notes[idx] = updatedNote;
-            _saveNotes(notes);
-          }
-        });
-      }
-    });
+    );
   }
 
-  Widget _buildFab() {
-    return FloatingActionButton(
-      onPressed: _addNote,
-      backgroundColor: const Color(0xFF111111),
-      foregroundColor: Colors.white,
-      elevation: 0,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.all(Radius.circular(16)),
+  @override
+  void dispose() {
+    _pageController.dispose();
+    super.dispose();
+  }
+}
+
+class _ActionChip extends StatelessWidget {
+  final String label;
+  final bool active;
+
+  const _ActionChip({required this.label, required this.active});
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.only(right: 8),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+        decoration: BoxDecoration(
+          color: active ? const Color(0xFF6366F1) : Colors.white,
+          borderRadius: BorderRadius.circular(20),
+          boxShadow: active ? null : [
+            BoxShadow(
+              color: Colors.grey[100]!,
+              blurRadius: 2,
+            ),
+          ],
+        ),
+        child: Text(
+          label,
+          style: TextStyle(
+            fontSize: 13,
+            color: active ? Colors.white : const Color(0xFF666666),
+            fontWeight: active ? FontWeight.w500 : FontWeight.normal,
+          ),
+        ),
       ),
-      child: const Icon(Icons.add, size: 24),
     );
   }
 }
 
-class NoteCard extends StatelessWidget {
+class _NoteCard extends StatefulWidget {
   final Note note;
   final VoidCallback onTap;
-  final VoidCallback onDelete;
-  final VoidCallback onFocus;
-  final bool isFocused;
+  final VoidCallback onLongPress;
 
-  const NoteCard({
-    super.key,
+  const _NoteCard({
     required this.note,
     required this.onTap,
-    required this.onDelete,
-    required this.onFocus,
-    required this.isFocused,
+    required this.onLongPress,
   });
 
   @override
+  State<_NoteCard> createState() => _NoteCardState();
+}
+
+class _NoteCardState extends State<_NoteCard> {
+  double _scale = 1.0;
+
+  @override
   Widget build(BuildContext context) {
-    final color = noteColors[note.colorIndex % noteColors.length];
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 12),
-      child: GestureDetector(
-        onTap: onTap,
-        onLongPress: () => _showOptions(context),
-        child: Container(
-          width: double.infinity,
-          padding: const EdgeInsets.all(18),
+    return GestureDetector(
+      onTap: widget.onTap,
+      onLongPress: widget.onLongPress,
+      onScaleUpdate: (details) {
+        setState(() {
+          _scale = details.scale.clamp(0.85, 1.15);
+        });
+      },
+      onScaleEnd: (_) {
+        setState(() => _scale = 1.0);
+      },
+      child: Transform.scale(
+        scale: _scale,
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 150),
           decoration: BoxDecoration(
-            color: color,
+            color: Color(widget.note.color),
             borderRadius: BorderRadius.circular(16),
-            border: Border.all(
-              color: isFocused
-                  ? const Color(0xFF111111)
-                  : Colors.black.withOpacity(0.05),
-              width: isFocused ? 2 : 1,
-            ),
-          ),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Text(
-                note.content,
-                style: TextStyle(
-                  fontSize: 15,
-                  color: Colors.grey[900],
-                  height: 1.6,
-                ),
-                maxLines: 8,
-                overflow: TextOverflow.ellipsis,
-              ),
-              const SizedBox(height: 14),
-              Row(
-                children: [
-                  Text(
-                    _formatTime(note.createdAt),
-                    style: TextStyle(
-                      fontSize: 12,
-                      color: Colors.grey[500],
-                    ),
-                  ),
-                  const Spacer(),
-                  GestureDetector(
-                    onTap: onFocus,
-                    child: Icon(
-                      isFocused ? Icons.push_pin : Icons.connect_without_contact,
-                      size: 16,
-                      color: isFocused ? const Color(0xFF111111) : Colors.grey[400],
-                    ),
-                  ),
-                ],
+            boxShadow: [
+              BoxShadow(
+                color: Colors.grey[200]!,
+                blurRadius: 6,
+                offset: const Offset(0, 2),
               ),
             ],
           ),
-        ),
-      ),
-    );
-  }
-
-  void _showOptions(BuildContext context) {
-    showModalBottomSheet(
-      context: context,
-      backgroundColor: Colors.transparent,
-      builder: (context) => Container(
-        padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 20),
-        decoration: const BoxDecoration(
-          color: Colors.white,
-          borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
-        ),
-        child: SafeArea(
+          padding: const EdgeInsets.all(16),
           child: Column(
-            mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Center(
-                child: Container(
-                  width: 32,
-                  height: 4,
-                  decoration: BoxDecoration(
-                    color: Colors.grey[300],
-                    borderRadius: BorderRadius.circular(2),
+              Expanded(
+                child: SingleChildScrollView(
+                  child: Text(
+                    widget.note.content,
+                    style: const TextStyle(
+                      fontSize: 14,
+                      color: Color(0xFF333333),
+                      height: 1.5,
+                    ),
+                    maxLines: 8,
+                    overflow: TextOverflow.ellipsis,
                   ),
                 ),
               ),
-              const SizedBox(height: 24),
-              ListTile(
-                contentPadding: EdgeInsets.zero,
-                leading: const Icon(Icons.connect_without_contact, color: Color(0xFF111111)),
-                title: const Text('探索关联'),
-                onTap: () {
-                  Navigator.pop(context);
-                  onFocus();
-                },
-              ),
-              ListTile(
-                contentPadding: EdgeInsets.zero,
-                leading: const Icon(Icons.delete_outline, color: Color(0xFFEF4444)),
-                title: const Text(
-                  '删除',
-                  style: TextStyle(color: Color(0xFFEF4444)),
+              const SizedBox(height: 8),
+              Text(
+                _formatTime(widget.note.createdAt),
+                style: TextStyle(
+                  fontSize: 12,
+                  color: Colors.grey[500],
                 ),
-                onTap: () {
-                  Navigator.pop(context);
-                  onDelete();
-                },
               ),
             ],
           ),
@@ -568,262 +488,176 @@ class NoteCard extends StatelessWidget {
   }
 
   String _formatTime(DateTime date) {
-    final diff = DateTime.now().difference(date);
+    final now = DateTime.now();
+    final diff = now.difference(date);
+    
     if (diff.inMinutes < 1) return '刚刚';
-    if (diff.inMinutes < 60) return '${diff.inMinutes} 分钟前';
-    if (diff.inHours < 24) return '${diff.inHours} 小时前';
-    if (diff.inDays < 7) return '${diff.inDays} 天前';
-    return '${date.month}月${date.day}日 ${date.hour}:${date.minute.toString().padLeft(2, '0')}';
+    if (diff.inMinutes < 60) return '${diff.inMinutes}分钟前';
+    if (diff.inHours < 24) return '${diff.inHours}小时前';
+    if (diff.inDays < 7) return '${diff.inDays}天前';
+    return '${date.month}/${date.day}';
   }
 }
 
-class NoteEditor extends StatefulWidget {
+class NoteEditorPage extends StatefulWidget {
   final Note? note;
-  final List<Note> Function(Note) onRelatedNotes;
 
-  const NoteEditor({
-    super.key,
-    this.note,
-    required this.onRelatedNotes,
-  });
+  const NoteEditorPage({super.key, this.note});
 
   @override
-  State<NoteEditor> createState() => _NoteEditorState();
+  State<NoteEditorPage> createState() => _NoteEditorPageState();
 }
 
-class _NoteEditorState extends State<NoteEditor> {
-  late TextEditingController _controller;
-  int _selectedColorIndex = 0;
-  bool _isSaving = false;
-  List<Note> _relatedNotes = [];
-  bool _showSuggestions = false;
+class _NoteEditorPageState extends State<NoteEditorPage> {
+  final TextEditingController _contentController = TextEditingController();
+  int _selectedColor = 0xFFFFF5E6;
+  final List<int> _colors = [
+    0xFFFFF5E6, 0xFFE6F7FF, 0xFFF6FFED, 0xFFFFF0E6, 0xFFF0E6FF,
+  ];
 
   @override
   void initState() {
     super.initState();
-    _controller = TextEditingController(text: widget.note?.content ?? '');
-    _selectedColorIndex = widget.note?.colorIndex ?? 0;
-    _controller.addListener(_onTextChanged);
-  }
-
-  @override
-  void dispose() {
-    _controller.removeListener(_onTextChanged);
-    _controller.dispose();
-    super.dispose();
-  }
-
-  void _onTextChanged() {
-    if (_controller.text.length > 20 && widget.note == null) {
-      final tempNote = Note(
-        id: 'temp',
-        content: _controller.text,
-        createdAt: DateTime.now(),
-      );
-      final related = widget.onRelatedNotes(tempNote);
-      if (mounted && related.isNotEmpty) {
-        setState(() {
-          _relatedNotes = related;
-          _showSuggestions = true;
-        });
-      }
+    if (widget.note != null) {
+      _contentController.text = widget.note!.content;
+      _selectedColor = widget.note!.color;
     }
   }
 
   void _saveNote() {
-    if (_controller.text.trim().isEmpty) {
+    if (_contentController.text.trim().isEmpty) {
       Navigator.pop(context);
       return;
     }
 
-    setState(() => _isSaving = true);
+    final note = Note(
+      id: widget.note?.id ?? DateTime.now().microsecondsSinceEpoch.toString(),
+      content: _contentController.text.trim(),
+      color: _selectedColor,
+      createdAt: widget.note?.createdAt ?? DateTime.now(),
+    );
 
-    Future.delayed(const Duration(milliseconds: 200), () {
-      final note = Note(
-        id: widget.note?.id ?? DateTime.now().toIso8601String(),
-        content: _controller.text.trim(),
-        colorIndex: _selectedColorIndex,
-        createdAt: widget.note?.createdAt ?? DateTime.now(),
-        relatedNoteIds: _relatedNotes.map((n) => n.id).toList(),
-      );
-      Navigator.pop(context, note);
-    });
+    Navigator.pop(context, note);
   }
 
   @override
   Widget build(BuildContext context) {
-    final color = noteColors[_selectedColorIndex % noteColors.length];
-    
     return Scaffold(
-      backgroundColor: color,
-      body: SafeArea(
-        child: Column(
-          children: [
-            _buildToolbar(),
-            if (_showSuggestions && _relatedNotes.isNotEmpty)
-              _buildSuggestions(),
-            Expanded(
-              child: SingleChildScrollView(
-                padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 24),
-                child: TextField(
-                  controller: _controller,
-                  autofocus: widget.note == null,
-                  decoration: const InputDecoration(
-                    hintText: '开始写...',
-                    border: InputBorder.none,
-                    hintStyle: TextStyle(
-                      fontSize: 18,
-                      color: Color(0xFF9CA3AF),
-                      height: 1.6,
-                    ),
-                  ),
-                  style: TextStyle(
-                    fontSize: 18,
-                    color: Colors.grey[900],
-                    height: 1.6,
-                  ),
-                  maxLines: null,
-                  keyboardType: TextInputType.multiline,
-                  textCapitalization: TextCapitalization.sentences,
-                ),
-              ),
-            ),
-            _buildColorPicker(),
-          ],
+      backgroundColor: Color(_selectedColor),
+      appBar: AppBar(
+        backgroundColor: Colors.transparent,
+        elevation: 0,
+        leading: IconButton(
+          icon: const Icon(Icons.arrow_back, color: Color(0xFF666666)),
+          onPressed: () => Navigator.pop(context),
         ),
-      ),
-    );
-  }
-
-  Widget _buildToolbar() {
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
-      child: Row(
-        children: [
-          GestureDetector(
-            onTap: () => Navigator.pop(context),
-            child: Container(
-              padding: const EdgeInsets.all(10),
-              decoration: BoxDecoration(
-                color: Colors.black.withOpacity(0.04),
-                borderRadius: BorderRadius.circular(12),
+        actions: [
+          TextButton(
+            onPressed: _saveNote,
+            child: const Text(
+              '保存',
+              style: TextStyle(
+                color: Color(0xFF6366F1),
+                fontWeight: FontWeight.w500,
               ),
-              child: const Icon(Icons.arrow_back, color: Color(0xFF4B5563), size: 22),
-            ),
-          ),
-          const Spacer(),
-          GestureDetector(
-            onTap: _saveNote,
-            child: Container(
-              padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
-              decoration: BoxDecoration(
-                color: const Color(0xFF111111),
-                borderRadius: BorderRadius.circular(12),
-              ),
-              child: _isSaving
-                  ? const SizedBox(
-                      width: 18,
-                      height: 18,
-                      child: CircularProgressIndicator(
-                        strokeWidth: 2,
-                        color: Colors.white,
-                      ),
-                    )
-                  : const Text(
-                      '保存',
-                      style: TextStyle(
-                        color: Colors.white,
-                        fontSize: 15,
-                        fontWeight: FontWeight.w600,
-                      ),
-                    ),
             ),
           ),
         ],
       ),
-    );
-  }
-
-  Widget _buildSuggestions() {
-    return Container(
-      margin: const EdgeInsets.symmetric(horizontal: 20),
-      padding: const EdgeInsets.all(14),
-      decoration: BoxDecoration(
-        color: const Color(0xFF111111),
-        borderRadius: BorderRadius.circular(12),
-      ),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
+      body: Column(
         children: [
-          const Icon(
-            Icons.auto_awesome,
-            color: Color(0xFFD4D4D4),
-            size: 18,
-          ),
-          const SizedBox(width: 10),
           Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  '发现了 ${_relatedNotes.length} 条相关笔记',
-                  style: TextStyle(
-                    fontSize: 13,
-                    fontWeight: FontWeight.w600,
-                    color: Colors.grey[300],
-                  ),
-                ),
-                const SizedBox(height: 6),
-                ..._relatedNotes.take(2).map((note) {
-                  return Padding(
-                    padding: const EdgeInsets.only(bottom: 4),
-                    child: Text(
-                      note.content,
-                      style: TextStyle(
-                        fontSize: 12,
-                        color: Colors.white.withOpacity(0.7),
-                      ),
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                  );
-                }).toList(),
-              ],
+            child: TextField(
+              controller: _contentController,
+              decoration: const InputDecoration(
+                hintText: '开始写...',
+                border: InputBorder.none,
+                contentPadding: EdgeInsets.symmetric(horizontal: 20, vertical: 10),
+                hintStyle: TextStyle(color: Color(0xFFBBBBBB)),
+              ),
+              style: const TextStyle(
+                fontSize: 16,
+                color: Color(0xFF333333),
+                height: 1.6,
+              ),
+              maxLines: null,
+              autofocus: true,
+              keyboardType: TextInputType.multiline,
             ),
           ),
+          _buildColorSelector(),
         ],
       ),
     );
   }
 
-  Widget _buildColorPicker() {
+  Widget _buildColorSelector() {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
       child: Row(
-        children: List.generate(noteColors.length, (index) {
-          final color = noteColors[index];
-          return GestureDetector(
-            onTap: () => setState(() => _selectedColorIndex = index),
-            child: Padding(
-              padding: const EdgeInsets.only(right: 10),
-              child: Container(
-                width: 36,
-                height: 36,
-                decoration: BoxDecoration(
-                  color: color,
-                  borderRadius: BorderRadius.circular(12),
-                  border: Border.all(
-                    color: _selectedColorIndex == index
-                        ? const Color(0xFF111111)
-                        : Colors.black.withOpacity(0.1),
-                    width: _selectedColorIndex == index ? 2 : 1,
-                  ),
-                ),
+        children: _colors.map((color) {
+          final isSelected = _selectedColor == color;
+          return Padding(
+            padding: const EdgeInsets.only(right: 12),
+            child: Container(
+              width: 40,
+              height: 40,
+              decoration: BoxDecoration(
+                color: Color(color),
+                borderRadius: BorderRadius.circular(12),
+                border: isSelected
+                    ? Border.all(color: const Color(0xFF6366F1), width: 2)
+                    : null,
+                boxShadow: isSelected
+                    ? [
+                        BoxShadow(
+                          color: const Color(0xFF6366F1).withOpacity(0.3),
+                          blurRadius: 8,
+                        ),
+                      ]
+                    : null,
               ),
+              child: isSelected
+                  ? const Icon(Icons.check, color: Color(0xFF6366F1), size: 18)
+                  : null,
             ),
           );
-        }),
+        }).toList(),
       ),
     );
   }
+
+  @override
+  void dispose() {
+    _contentController.dispose();
+    super.dispose();
+  }
+}
+
+class Note {
+  final String id;
+  final String content;
+  final int color;
+  final DateTime createdAt;
+
+  Note({
+    required this.id,
+    required this.content,
+    required this.color,
+    required this.createdAt,
+  });
+
+  Map<String, dynamic> toJson() => {
+        'id': id,
+        'content': content,
+        'color': color,
+        'createdAt': createdAt.toIso8601String(),
+      };
+
+  factory Note.fromJson(Map<String, dynamic> json) => Note(
+        id: json['id'],
+        content: json['content'],
+        color: json['color'],
+        createdAt: DateTime.parse(json['createdAt']),
+      );
 }
