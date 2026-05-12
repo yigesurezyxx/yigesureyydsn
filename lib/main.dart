@@ -6,6 +6,13 @@ import 'package:flutter/services.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 void main() {
+  WidgetsFlutterBinding.ensureInitialized();
+  SystemChrome.setSystemUIOverlayStyle(
+    const SystemUiOverlayStyle(
+      statusBarColor: Colors.transparent,
+      statusBarIconBrightness: Brightness.dark,
+    ),
+  );
   runApp(const YeahApp());
 }
 
@@ -19,12 +26,23 @@ class YeahApp extends StatelessWidget {
       debugShowCheckedModeBanner: false,
       theme: ThemeData(
         useMaterial3: true,
+        brightness: Brightness.light,
         colorScheme: ColorScheme.fromSeed(
           seedColor: const Color(0xFF6366F1),
           brightness: Brightness.light,
         ),
         fontFamily: 'Roboto',
       ),
+      darkTheme: ThemeData(
+        useMaterial3: true,
+        brightness: Brightness.dark,
+        colorScheme: ColorScheme.fromSeed(
+          seedColor: const Color(0xFF6366F1),
+          brightness: Brightness.dark,
+        ),
+        fontFamily: 'Roboto',
+      ),
+      themeMode: ThemeMode.system,
       home: const NoteHomePage(),
     );
   }
@@ -45,10 +63,12 @@ class _NoteHomePageState extends State<NoteHomePage> with TickerProviderStateMix
   ViewMode _viewMode = ViewMode.grid;
   String _sortBy = 'date';
   Set<String> _selectedTags = {};
+  bool _isDarkMode = false;
   
   final TextEditingController _searchController = TextEditingController();
   late AnimationController _fabAnimationController;
   late AnimationController _refreshAnimationController;
+  late AnimationController _searchAnimationController;
 
   @override
   void initState() {
@@ -61,8 +81,13 @@ class _NoteHomePageState extends State<NoteHomePage> with TickerProviderStateMix
       vsync: this,
       duration: const Duration(milliseconds: 800),
     );
+    _searchAnimationController = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 200),
+    );
     _loadNotes();
     _refreshAnimationController.repeat();
+    _isDarkMode = MediaQuery.platformBrightnessOf(context) == Brightness.dark;
   }
 
   Future<void> _loadNotes() async {
@@ -85,28 +110,31 @@ class _NoteHomePageState extends State<NoteHomePage> with TickerProviderStateMix
     final demoNotes = [
       Note(
         id: DateTime.now().millisecondsSinceEpoch.toString(),
-        title: '创新设计理念',
+        title: '🎨 设计灵感',
         content: '好的设计是尽可能少的设计。让功能自然而然地呈现，而不是堆砌。',
         color: 0xFFFFF5E6,
-        tags: ['设计', '理念'],
+        tags: ['设计', '灵感'],
         createdAt: DateTime.now().subtract(const Duration(hours: 1)),
         isFavorite: true,
+        mood: '✨',
       ),
       Note(
         id: (DateTime.now().millisecondsSinceEpoch - 1).toString(),
-        title: '用户反馈',
+        title: '💡 产品思考',
         content: '用户需要的是简单易用的产品，而不是功能复杂的技术展示。',
         color: 0xFFE6F7FF,
-        tags: ['反馈', '产品'],
+        tags: ['产品', '思考'],
         createdAt: DateTime.now().subtract(const Duration(hours: 3)),
+        mood: '💡',
       ),
       Note(
         id: (DateTime.now().millisecondsSinceEpoch - 2).toString(),
-        title: '本周计划',
+        title: '📋 本周任务',
         content: '1. 完成核心功能开发\n2. 优化用户体验\n3. 收集用户反馈',
         color: 0xFFF6FFED,
-        tags: ['计划'],
+        tags: ['任务'],
         createdAt: DateTime.now().subtract(const Duration(days: 1)),
+        mood: '🎯',
       ),
     ];
     _notes.addAll(demoNotes);
@@ -124,7 +152,8 @@ class _NoteHomePageState extends State<NoteHomePage> with TickerProviderStateMix
     _filteredNotes = _notes.where((note) {
       final matchesSearch = _searchQuery.isEmpty ||
           note.title.toLowerCase().contains(_searchQuery.toLowerCase()) ||
-          note.content.toLowerCase().contains(_searchQuery.toLowerCase());
+          note.content.toLowerCase().contains(_searchQuery.toLowerCase()) ||
+          note.tags.any((tag) => tag.toLowerCase().contains(_searchQuery.toLowerCase()));
       
       final matchesTags = _selectedTags.isEmpty ||
           note.tags.any((tag) => _selectedTags.contains(tag));
@@ -157,6 +186,23 @@ class _NoteHomePageState extends State<NoteHomePage> with TickerProviderStateMix
     return tags;
   }
 
+  Map<String, dynamic> get _stats {
+    final totalNotes = _notes.length;
+    final favoriteNotes = _notes.where((n) => n.isFavorite).length;
+    final allTags = _allTags.length;
+    final todayNotes = _notes.where((n) => 
+      n.createdAt.year == DateTime.now().year &&
+      n.createdAt.month == DateTime.now().month &&
+      n.createdAt.day == DateTime.now().day
+    ).length;
+    return {
+      'total': totalNotes,
+      'favorite': favoriteNotes,
+      'tags': allTags,
+      'today': todayNotes,
+    };
+  }
+
   void _addNote() {
     Navigator.push(
       context,
@@ -183,7 +229,7 @@ class _NoteHomePageState extends State<NoteHomePage> with TickerProviderStateMix
           _applyFilters();
         });
         _saveNotes();
-        _showSnackBar('笔记已创建', Icons.check_circle, Colors.green);
+        _showSnackBar('✨ 笔记已创建', Icons.check_circle, Colors.green);
       }
     });
   }
@@ -216,33 +262,43 @@ class _NoteHomePageState extends State<NoteHomePage> with TickerProviderStateMix
           }
         });
         _saveNotes();
-        _showSnackBar('笔记已更新', Icons.edit, Colors.blue);
+        _showSnackBar('📝 笔记已更新', Icons.edit, Colors.blue);
       }
     });
   }
 
   void _deleteNote(Note note, int index) {
+    final deletedNote = note;
     setState(() {
       _notes.removeWhere((n) => n.id == note.id);
       _applyFilters();
     });
     _saveNotes();
-    _showSnackBar('笔记已删除', Icons.delete, Colors.red);
     
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
-        content: const Text('笔记已删除'),
+        content: Row(
+          children: [
+            const Icon(Icons.delete_outline, color: Colors.white),
+            const SizedBox(width: 8),
+            const Text('笔记已删除'),
+          ],
+        ),
         action: SnackBarAction(
           label: '撤销',
+          textColor: Colors.white,
           onPressed: () {
             setState(() {
-              _notes.insert(index.clamp(0, _notes.length), note);
+              _notes.insert(index.clamp(0, _notes.length), deletedNote);
               _applyFilters();
             });
             _saveNotes();
           },
         ),
         duration: const Duration(seconds: 3),
+        behavior: SnackBarBehavior.floating,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+        backgroundColor: Colors.grey[800],
       ),
     );
   }
@@ -257,7 +313,7 @@ class _NoteHomePageState extends State<NoteHomePage> with TickerProviderStateMix
     });
     _saveNotes();
     _showSnackBar(
-      note.isFavorite ? '已取消收藏' : '已收藏',
+      note.isFavorite ? '⭐ 取消收藏' : '⭐ 已收藏',
       note.isFavorite ? Icons.star_border : Icons.star,
       note.isFavorite ? Colors.grey : Colors.amber,
     );
@@ -282,62 +338,163 @@ class _NoteHomePageState extends State<NoteHomePage> with TickerProviderStateMix
 
   @override
   Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final stats = _stats;
+
     return Scaffold(
-      backgroundColor: Theme.of(context).colorScheme.surface,
+      backgroundColor: isDark ? const Color(0xFF121212) : const Color(0xFFF8F9FA),
       body: _isLoading
-          ? const Center(child: CircularProgressIndicator())
+          ? Center(
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  TweenAnimationBuilder<double>(
+                    tween: Tween(begin: 0.0, end: 1.0),
+                    duration: const Duration(seconds: 1),
+                    builder: (context, value, child) {
+                      return Opacity(
+                        opacity: value,
+                        child: const Icon(
+                          Icons.edit_note,
+                          size: 64,
+                          color: Color(0xFF6366F1),
+                        ),
+                      );
+                    },
+                  ),
+                  const SizedBox(height: 16),
+                  Text(
+                    'yeah',
+                    style: TextStyle(
+                      fontSize: 24,
+                      fontWeight: FontWeight.bold,
+                      color: isDark ? Colors.white : const Color(0xFF1A1A1A),
+                    ),
+                  ),
+                ],
+              ),
+            )
           : CustomScrollView(
               slivers: [
-                _buildAppBar(),
-                _buildSearchAndFilter(),
-                _buildTagFilter(),
-                _buildNotesList(),
+                _buildHeader(isDark, stats),
+                _buildSearchBar(isDark),
+                _buildQuickStats(isDark, stats),
+                _buildTagFilter(isDark),
+                _buildNotesList(isDark),
               ],
             ),
       floatingActionButton: _buildAnimatedFab(),
     );
   }
 
-  Widget _buildAppBar() {
+  Widget _buildHeader(bool isDark, Map<String, dynamic> stats) {
     return SliverAppBar(
-      expandedHeight: 120,
-      floating: true,
+      expandedHeight: 180,
+      floating: false,
       pinned: true,
-      backgroundColor: Theme.of(context).colorScheme.surface,
+      backgroundColor: isDark ? const Color(0xFF1E1E1E) : Colors.white,
       surfaceTintColor: Colors.transparent,
+      elevation: 0,
       flexibleSpace: FlexibleSpaceBar(
-        titlePadding: const EdgeInsets.only(left: 20, bottom: 16),
-        title: Row(
-          children: [
-            const Text(
-              'yeah',
-              style: TextStyle(
-                fontSize: 28,
-                fontWeight: FontWeight.bold,
-                color: Color(0xFF1A1A1A),
+        background: Container(
+          decoration: BoxDecoration(
+            gradient: LinearGradient(
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
+              colors: isDark 
+                  ? [const Color(0xFF1E1E1E), const Color(0xFF2D2D2D)]
+                  : [Colors.white, const Color(0xFFF8F9FA)],
+            ),
+          ),
+          child: SafeArea(
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(20, 10, 20, 0),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Row(
+                        children: [
+                          Container(
+                            padding: const EdgeInsets.all(10),
+                            decoration: BoxDecoration(
+                              gradient: const LinearGradient(
+                                colors: [Color(0xFF6366F1), Color(0xFF8B5CF6)],
+                              ),
+                              borderRadius: BorderRadius.circular(12),
+                            ),
+                            child: const Icon(Icons.edit_note, color: Colors.white, size: 24),
+                          ),
+                          const SizedBox(width: 12),
+                          Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              const Text(
+                                'yeah',
+                                style: TextStyle(
+                                  fontSize: 28,
+                                  fontWeight: FontWeight.bold,
+                                  color: Color(0xFF1A1A1A),
+                                ),
+                              ),
+                              Text(
+                                _getGreeting(),
+                                style: TextStyle(
+                                  fontSize: 14,
+                                  color: Colors.grey[600],
+                                ),
+                              ),
+                            ],
+                          ),
+                        ],
+                      ),
+                      IconButton(
+                        icon: Icon(
+                          isDark ? Icons.light_mode : Icons.dark_mode,
+                          color: isDark ? Colors.white : Colors.grey[700],
+                        ),
+                        onPressed: () {
+                          setState(() => _isDarkMode = !_isDarkMode);
+                        },
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 20),
+                  Row(
+                    children: [
+                      _StatCard(
+                        icon: Icons.note_outlined,
+                        value: '${stats['total']}',
+                        label: '笔记',
+                        color: const Color(0xFF6366F1),
+                      ),
+                      const SizedBox(width: 12),
+                      _StatCard(
+                        icon: Icons.star_outline,
+                        value: '${stats['favorite']}',
+                        label: '收藏',
+                        color: Colors.amber,
+                      ),
+                      const SizedBox(width: 12),
+                      _StatCard(
+                        icon: Icons.label_outline,
+                        value: '${stats['tags']}',
+                        label: '标签',
+                        color: const Color(0xFF10B981),
+                      ),
+                    ],
+                  ),
+                ],
               ),
             ),
-            const SizedBox(width: 8),
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-              decoration: BoxDecoration(
-                color: Theme.of(context).colorScheme.primaryContainer,
-                borderRadius: BorderRadius.circular(12),
-              ),
-              child: Text(
-                '${_notes.length}',
-                style: TextStyle(
-                  fontSize: 12,
-                  color: Theme.of(context).colorScheme.onPrimaryContainer,
-                ),
-              ),
-            ),
-          ],
+          ),
         ),
       ),
       actions: [
         PopupMenuButton<String>(
-          icon: const Icon(Icons.sort),
+          icon: Icon(Icons.sort, color: isDark ? Colors.white70 : Colors.grey[700]),
           tooltip: '排序',
           onSelected: (value) {
             setState(() {
@@ -346,41 +503,41 @@ class _NoteHomePageState extends State<NoteHomePage> with TickerProviderStateMix
             });
           },
           itemBuilder: (context) => [
-            const PopupMenuItem(value: 'date', child: Text('按时间')),
-            const PopupMenuItem(value: 'name', child: Text('按名称')),
-            const PopupMenuItem(value: 'favorite', child: Text('收藏优先')),
+            const PopupMenuItem(value: 'date', child: Text('📅 按时间')),
+            const PopupMenuItem(value: 'name', child: Text('🔤 按名称')),
+            const PopupMenuItem(value: 'favorite', child: Text('⭐ 收藏优先')),
           ],
         ),
         PopupMenuButton<ViewMode>(
-          icon: const Icon(Icons.view_module),
+          icon: Icon(Icons.view_module, color: isDark ? Colors.white70 : Colors.grey[700]),
           tooltip: '视图模式',
           onSelected: (mode) {
             setState(() => _viewMode = mode);
           },
           itemBuilder: (context) => [
-            const PopupMenuItem(value: ViewMode.grid, child: Text('网格视图')),
-            const PopupMenuItem(value: ViewMode.list, child: Text('列表视图')),
-            const PopupMenuItem(value: ViewMode.compact, child: Text('紧凑视图')),
+            const PopupMenuItem(value: ViewMode.grid, child: Text('📱 网格视图')),
+            const PopupMenuItem(value: ViewMode.list, child: Text('📋 列表视图')),
+            const PopupMenuItem(value: ViewMode.compact, child: Text('⚡ 紧凑视图')),
           ],
         ),
       ],
     );
   }
 
-  Widget _buildSearchAndFilter() {
+  Widget _buildSearchBar(bool isDark) {
     return SliverToBoxAdapter(
       child: Padding(
-        padding: const EdgeInsets.fromLTRB(20, 8, 20, 0),
+        padding: const EdgeInsets.fromLTRB(20, 16, 20, 0),
         child: AnimatedContainer(
           duration: const Duration(milliseconds: 300),
           decoration: BoxDecoration(
-            color: Theme.of(context).colorScheme.surfaceContainerHighest,
+            color: isDark ? const Color(0xFF2D2D2D) : Colors.white,
             borderRadius: BorderRadius.circular(16),
             boxShadow: [
               BoxShadow(
-                color: Colors.black.withOpacity(0.05),
-                blurRadius: 10,
-                offset: const Offset(0, 2),
+                color: Colors.black.withOpacity(isDark ? 0.3 : 0.08),
+                blurRadius: 15,
+                offset: const Offset(0, 4),
               ),
             ],
           ),
@@ -393,22 +550,20 @@ class _NoteHomePageState extends State<NoteHomePage> with TickerProviderStateMix
               });
             },
             decoration: InputDecoration(
-              hintText: '搜索笔记...',
+              hintText: '🔍 搜索笔记、标签...',
+              hintStyle: TextStyle(color: Colors.grey[500]),
               prefixIcon: AnimatedBuilder(
                 animation: _refreshAnimationController,
                 builder: (context, child) {
-                  return Transform.rotate(
-                    angle: _searchQuery.isEmpty ? 0 : _refreshAnimationController.value * 2 * pi,
-                    child: Icon(
-                      _searchQuery.isEmpty ? Icons.search : Icons.sync,
-                      color: Theme.of(context).colorScheme.primary,
-                    ),
+                  return Icon(
+                    _searchQuery.isEmpty ? Icons.search : Icons.search,
+                    color: const Color(0xFF6366F1),
                   );
                 },
               ),
               suffixIcon: _searchQuery.isNotEmpty
                   ? IconButton(
-                      icon: const Icon(Icons.clear),
+                      icon: const Icon(Icons.clear, color: Colors.grey),
                       onPressed: () {
                         _searchController.clear();
                         setState(() {
@@ -427,59 +582,131 @@ class _NoteHomePageState extends State<NoteHomePage> with TickerProviderStateMix
     );
   }
 
-  Widget _buildTagFilter() {
-    final tags = _allTags.toList();
-    if (tags.isEmpty) return const SliverToBoxAdapter(child: SizedBox.shrink());
-
+  Widget _buildQuickStats(bool isDark, Map<String, dynamic> stats) {
     return SliverToBoxAdapter(
       child: Container(
-        height: 50,
-        margin: const EdgeInsets.only(top: 12),
-        child: ListView.builder(
-          scrollDirection: Axis.horizontal,
-          padding: const EdgeInsets.symmetric(horizontal: 16),
-          itemCount: tags.length + 1,
-          itemBuilder: (context, index) {
-            if (index == 0) {
-              return Padding(
-                padding: const EdgeInsets.only(right: 8),
-                child: FilterChip(
-                  label: const Text('全部'),
-                  selected: _selectedTags.isEmpty,
-                  onSelected: (selected) {
-                    setState(() {
-                      _selectedTags.clear();
-                      _applyFilters();
-                    });
-                  },
-                ),
-              );
-            }
-            final tag = tags[index - 1];
-            return Padding(
-              padding: const EdgeInsets.only(right: 8),
-              child: FilterChip(
-                label: Text(tag),
-                selected: _selectedTags.contains(tag),
-                onSelected: (selected) {
-                  setState(() {
-                    if (selected) {
-                      _selectedTags.add(tag);
-                    } else {
-                      _selectedTags.remove(tag);
-                    }
-                    _applyFilters();
-                  });
-                },
-              ),
-            );
-          },
+        margin: const EdgeInsets.only(top: 16, left: 20, right: 20),
+        padding: const EdgeInsets.all(16),
+        decoration: BoxDecoration(
+          gradient: LinearGradient(
+            colors: [
+              const Color(0xFF6366F1).withOpacity(0.1),
+              const Color(0xFF8B5CF6).withOpacity(0.1),
+            ],
+          ),
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(
+            color: const Color(0xFF6366F1).withOpacity(0.2),
+          ),
+        ),
+        child: Row(
+          mainAxisAlignment: MainAxisAlignment.spaceAround,
+          children: [
+            _QuickStat(
+              emoji: '📝',
+              value: '${stats['today']}',
+              label: '今日',
+            ),
+            Container(width: 1, height: 40, color: Colors.grey[300]),
+            _QuickStat(
+              emoji: '📊',
+              value: '${stats['total']}',
+              label: '总计',
+            ),
+            Container(width: 1, height: 40, color: Colors.grey[300]),
+            _QuickStat(
+              emoji: '🔥',
+              value: '${stats['favorite']}',
+              label: '收藏',
+            ),
+          ],
         ),
       ),
     );
   }
 
-  Widget _buildNotesList() {
+  Widget _buildTagFilter(bool isDark) {
+    final tags = _allTags.toList();
+    if (tags.isEmpty) return const SliverToBoxAdapter(child: SizedBox.shrink());
+
+    return SliverToBoxAdapter(
+      child: Container(
+        margin: const EdgeInsets.only(top: 16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 20),
+              child: Text(
+                '🏷️ 标签筛选',
+                style: TextStyle(
+                  fontSize: 14,
+                  fontWeight: FontWeight.w600,
+                  color: isDark ? Colors.white70 : Colors.grey[700],
+                ),
+              ),
+            ),
+            const SizedBox(height: 8),
+            SizedBox(
+              height: 40,
+              child: ListView.builder(
+                scrollDirection: Axis.horizontal,
+                padding: const EdgeInsets.symmetric(horizontal: 16),
+                itemCount: tags.length + 1,
+                itemBuilder: (context, index) {
+                  if (index == 0) {
+                    return Padding(
+                      padding: const EdgeInsets.only(right: 8),
+                      child: FilterChip(
+                        label: const Text('全部'),
+                        selected: _selectedTags.isEmpty,
+                        selectedColor: const Color(0xFF6366F1),
+                        checkmarkColor: Colors.white,
+                        labelStyle: TextStyle(
+                          color: _selectedTags.isEmpty ? Colors.white : (isDark ? Colors.white70 : Colors.grey[700]),
+                        ),
+                        onSelected: (selected) {
+                          setState(() {
+                            _selectedTags.clear();
+                            _applyFilters();
+                          });
+                        },
+                      ),
+                    );
+                  }
+                  final tag = tags[index - 1];
+                  return Padding(
+                    padding: const EdgeInsets.only(right: 8),
+                    child: FilterChip(
+                      label: Text(tag),
+                      selected: _selectedTags.contains(tag),
+                      selectedColor: const Color(0xFF6366F1),
+                      checkmarkColor: Colors.white,
+                      labelStyle: TextStyle(
+                        color: _selectedTags.contains(tag) ? Colors.white : (isDark ? Colors.white70 : Colors.grey[700]),
+                      ),
+                      onSelected: (selected) {
+                        setState(() {
+                          if (selected) {
+                            _selectedTags.add(tag);
+                          } else {
+                            _selectedTags.remove(tag);
+                          }
+                          _applyFilters();
+                        });
+                      },
+                    ),
+                  );
+                },
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildNotesList(bool isDark) {
     if (_filteredNotes.isEmpty) {
       return SliverFillRemaining(
         child: Center(
@@ -496,7 +723,7 @@ class _NoteHomePageState extends State<NoteHomePage> with TickerProviderStateMix
                     child: Icon(
                       Icons.lightbulb_outline,
                       size: 64,
-                      color: Theme.of(context).colorScheme.primary.withOpacity(0.3),
+                      color: const Color(0xFF6366F1).withOpacity(0.3),
                     ),
                   );
                 },
@@ -506,14 +733,14 @@ class _NoteHomePageState extends State<NoteHomePage> with TickerProviderStateMix
                 _searchQuery.isNotEmpty ? '没有找到相关笔记' : '还没有笔记',
                 style: TextStyle(
                   fontSize: 18,
-                  color: Colors.grey[600],
+                  color: isDark ? Colors.white70 : Colors.grey[600],
                 ),
               ),
               const SizedBox(height: 8),
               Text(
                 _searchQuery.isNotEmpty ? '试试其他关键词' : '点击下方按钮开始记录',
                 style: TextStyle(
-                  color: Colors.grey[400],
+                  color: isDark ? Colors.white38 : Colors.grey[400],
                 ),
               ),
             ],
@@ -525,14 +752,14 @@ class _NoteHomePageState extends State<NoteHomePage> with TickerProviderStateMix
     return SliverPadding(
       padding: const EdgeInsets.all(16),
       sliver: _viewMode == ViewMode.grid
-          ? _buildGridView()
+          ? _buildGridView(isDark)
           : _viewMode == ViewMode.list
-              ? _buildListView()
-              : _buildCompactListView(),
+              ? _buildListView(isDark)
+              : _buildCompactListView(isDark),
     );
   }
 
-  Widget _buildGridView() {
+  Widget _buildGridView(bool isDark) {
     return SliverGrid(
       gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
         crossAxisCount: 2,
@@ -541,37 +768,37 @@ class _NoteHomePageState extends State<NoteHomePage> with TickerProviderStateMix
         childAspectRatio: 0.85,
       ),
       delegate: SliverChildBuilderDelegate(
-        (context, index) => _buildAnimatedCard(index),
+        (context, index) => _buildAnimatedCard(index, isDark),
         childCount: _filteredNotes.length,
       ),
     );
   }
 
-  Widget _buildListView() {
+  Widget _buildListView(bool isDark) {
     return SliverList(
       delegate: SliverChildBuilderDelegate(
         (context, index) => Padding(
           padding: const EdgeInsets.only(bottom: 12),
-          child: _buildAnimatedListItem(index),
+          child: _buildAnimatedListItem(index, isDark),
         ),
         childCount: _filteredNotes.length,
       ),
     );
   }
 
-  Widget _buildCompactListView() {
+  Widget _buildCompactListView(bool isDark) {
     return SliverList(
       delegate: SliverChildBuilderDelegate(
         (context, index) => Padding(
           padding: const EdgeInsets.only(bottom: 8),
-          child: _buildCompactItem(index),
+          child: _buildCompactItem(index, isDark),
         ),
         childCount: _filteredNotes.length,
       ),
     );
   }
 
-  Widget _buildAnimatedCard(int index) {
+  Widget _buildAnimatedCard(int index, bool isDark) {
     return TweenAnimationBuilder<double>(
       tween: Tween(begin: 0.0, end: 1.0),
       duration: Duration(milliseconds: 300 + (index * 50).clamp(0, 300)),
@@ -590,11 +817,12 @@ class _NoteHomePageState extends State<NoteHomePage> with TickerProviderStateMix
         onTap: () => _editNote(_filteredNotes[index]),
         onDelete: () => _deleteNote(_filteredNotes[index], index),
         onFavorite: () => _toggleFavorite(_filteredNotes[index]),
+        isDark: isDark,
       ),
     );
   }
 
-  Widget _buildAnimatedListItem(int index) {
+  Widget _buildAnimatedListItem(int index, bool isDark) {
     return TweenAnimationBuilder<double>(
       tween: Tween(begin: 0.0, end: 1.0),
       duration: Duration(milliseconds: 200 + (index * 30).clamp(0, 200)),
@@ -613,36 +841,46 @@ class _NoteHomePageState extends State<NoteHomePage> with TickerProviderStateMix
         onTap: () => _editNote(_filteredNotes[index]),
         onDelete: () => _deleteNote(_filteredNotes[index], index),
         onFavorite: () => _toggleFavorite(_filteredNotes[index]),
+        isDark: isDark,
       ),
     );
   }
 
-  Widget _buildCompactItem(int index) {
+  Widget _buildCompactItem(int index, bool isDark) {
     return _NoteCompactItem(
       note: _filteredNotes[index],
       onTap: () => _editNote(_filteredNotes[index]),
       onDelete: () => _deleteNote(_filteredNotes[index], index),
       onFavorite: () => _toggleFavorite(_filteredNotes[index]),
+      isDark: isDark,
     );
   }
 
   Widget _buildAnimatedFab() {
-    return AnimatedBuilder(
-      animation: _fabAnimationController,
-      builder: (context, child) {
+    return TweenAnimationBuilder<double>(
+      tween: Tween(begin: 0.0, end: 1.0),
+      duration: const Duration(milliseconds: 500),
+      curve: Curves.elasticOut,
+      builder: (context, value, child) {
         return Transform.scale(
-          scale: 1.0 + (_fabAnimationController.value * 0.1),
-          child: FloatingActionButton(
-            onPressed: _addNote,
-            elevation: 8,
-            child: AnimatedIcon(
-              icon: AnimatedIcons.add_event,
-              progress: _fabAnimationController,
-            ),
-          ),
+          scale: value,
+          child: child,
         );
       },
+      child: FloatingActionButton(
+        onPressed: _addNote,
+        elevation: 8,
+        backgroundColor: const Color(0xFF6366F1),
+        child: const Icon(Icons.add, color: Colors.white, size: 28),
+      ),
     );
+  }
+
+  String _getGreeting() {
+    final hour = DateTime.now().hour;
+    if (hour < 12) return '早上好 ☀️';
+    if (hour < 18) return '下午好 🌤️';
+    return '晚上好 🌙';
   }
 
   @override
@@ -650,7 +888,93 @@ class _NoteHomePageState extends State<NoteHomePage> with TickerProviderStateMix
     _searchController.dispose();
     _fabAnimationController.dispose();
     _refreshAnimationController.dispose();
+    _searchAnimationController.dispose();
     super.dispose();
+  }
+}
+
+class _StatCard extends StatelessWidget {
+  final IconData icon;
+  final String value;
+  final String label;
+  final Color color;
+
+  const _StatCard({
+    required this.icon,
+    required this.value,
+    required this.label,
+    required this.color,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Expanded(
+      child: Container(
+        padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 8),
+        decoration: BoxDecoration(
+          color: color.withOpacity(0.1),
+          borderRadius: BorderRadius.circular(12),
+        ),
+        child: Column(
+          children: [
+            Icon(icon, color: color, size: 20),
+            const SizedBox(height: 4),
+            Text(
+              value,
+              style: TextStyle(
+                fontSize: 18,
+                fontWeight: FontWeight.bold,
+                color: color,
+              ),
+            ),
+            Text(
+              label,
+              style: TextStyle(
+                fontSize: 11,
+                color: Colors.grey[600],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _QuickStat extends StatelessWidget {
+  final String emoji;
+  final String value;
+  final String label;
+
+  const _QuickStat({
+    required this.emoji,
+    required this.value,
+    required this.label,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      children: [
+        Text(emoji, style: const TextStyle(fontSize: 24)),
+        const SizedBox(height: 4),
+        Text(
+          value,
+          style: const TextStyle(
+            fontSize: 20,
+            fontWeight: FontWeight.bold,
+            color: Color(0xFF6366F1),
+          ),
+        ),
+        Text(
+          label,
+          style: TextStyle(
+            fontSize: 12,
+            color: Colors.grey[600],
+          ),
+        ),
+      ],
+    );
   }
 }
 
@@ -659,12 +983,14 @@ class _NoteCard extends StatefulWidget {
   final VoidCallback onTap;
   final VoidCallback onDelete;
   final VoidCallback onFavorite;
+  final bool isDark;
 
   const _NoteCard({
     required this.note,
     required this.onTap,
     required this.onDelete,
     required this.onFavorite,
+    required this.isDark,
   });
 
   @override
@@ -753,71 +1079,79 @@ class _NoteCardState extends State<_NoteCard> with SingleTickerProviderStateMixi
                   ),
                 ],
               ),
-              padding: const EdgeInsets.all(16),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Row(
-                    children: [
-                      if (widget.note.isFavorite)
-                        const Padding(
-                          padding: EdgeInsets.only(right: 4),
-                          child: Icon(Icons.star, color: Colors.amber, size: 16),
-                        ),
-                      Expanded(
-                        child: Text(
-                          widget.note.title,
-                          style: const TextStyle(
-                            fontSize: 16,
-                            fontWeight: FontWeight.w600,
-                            color: Color(0xFF1A1A1A),
-                          ),
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                        ),
+                  if (widget.note.mood.isNotEmpty)
+                    Padding(
+                      padding: const EdgeInsets.all(12),
+                      child: Text(
+                        widget.note.mood,
+                        style: const TextStyle(fontSize: 24),
                       ),
-                    ],
-                  ),
-                  const SizedBox(height: 8),
-                  Expanded(
-                    child: Text(
-                      widget.note.content,
-                      style: TextStyle(
-                        fontSize: 14,
-                        color: Colors.grey[700],
-                        height: 1.4,
-                      ),
-                      maxLines: 4,
-                      overflow: TextOverflow.ellipsis,
                     ),
-                  ),
-                  const SizedBox(height: 8),
-                  Row(
-                    children: [
-                      ...widget.note.tags.take(2).map((tag) => Container(
-                        margin: const EdgeInsets.only(right: 4),
-                        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                        decoration: BoxDecoration(
-                          color: Colors.black.withOpacity(0.05),
-                          borderRadius: BorderRadius.circular(4),
-                        ),
-                        child: Text(
-                          tag,
-                          style: TextStyle(
-                            fontSize: 10,
-                            color: Colors.grey[600],
+                  Expanded(
+                    child: Padding(
+                      padding: const EdgeInsets.fromLTRB(12, 0, 12, 12),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Row(
+                            children: [
+                              if (widget.note.isFavorite)
+                                const Padding(
+                                  padding: EdgeInsets.only(right: 4),
+                                  child: Icon(Icons.star, color: Colors.amber, size: 16),
+                                ),
+                              Expanded(
+                                child: Text(
+                                  widget.note.title,
+                                  style: const TextStyle(
+                                    fontSize: 16,
+                                    fontWeight: FontWeight.w600,
+                                    color: Color(0xFF1A1A1A),
+                                  ),
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                ),
+                              ),
+                            ],
                           ),
-                        ),
-                      )),
-                      const Spacer(),
-                      Text(
-                        _formatTime(widget.note.createdAt),
-                        style: TextStyle(
-                          fontSize: 11,
-                          color: Colors.grey[500],
-                        ),
+                          const SizedBox(height: 6),
+                          Expanded(
+                            child: Text(
+                              widget.note.content,
+                              style: TextStyle(
+                                fontSize: 13,
+                                color: Colors.grey[700],
+                                height: 1.4,
+                              ),
+                              maxLines: 4,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ),
+                          const SizedBox(height: 8),
+                          Wrap(
+                            spacing: 4,
+                            runSpacing: 4,
+                            children: widget.note.tags.take(2).map((tag) => Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                              decoration: BoxDecoration(
+                                color: Colors.black.withOpacity(0.08),
+                                borderRadius: BorderRadius.circular(4),
+                              ),
+                              child: Text(
+                                '#$tag',
+                                style: TextStyle(
+                                  fontSize: 10,
+                                  color: Colors.grey[600],
+                                ),
+                              ),
+                            )).toList(),
+                          ),
+                        ],
                       ),
-                    ],
+                    ),
                   ),
                 ],
               ),
@@ -851,17 +1185,6 @@ class _NoteCardState extends State<_NoteCard> with SingleTickerProviderStateMixi
       ),
     );
   }
-
-  String _formatTime(DateTime date) {
-    final now = DateTime.now();
-    final diff = now.difference(date);
-    
-    if (diff.inMinutes < 1) return '刚刚';
-    if (diff.inMinutes < 60) return '${diff.inMinutes}m';
-    if (diff.inHours < 24) return '${diff.inHours}h';
-    if (diff.inDays < 7) return '${diff.inDays}d';
-    return '${date.month}/${date.day}';
-  }
 }
 
 class _NoteListItem extends StatelessWidget {
@@ -869,12 +1192,14 @@ class _NoteListItem extends StatelessWidget {
   final VoidCallback onTap;
   final VoidCallback onDelete;
   final VoidCallback onFavorite;
+  final bool isDark;
 
   const _NoteListItem({
     required this.note,
     required this.onTap,
     required this.onDelete,
     required this.onFavorite,
+    required this.isDark,
   });
 
   @override
@@ -885,11 +1210,10 @@ class _NoteListItem extends StatelessWidget {
       confirmDismiss: (direction) async {
         if (direction == DismissDirection.startToEnd) {
           onFavorite();
-          return false;
         } else {
           onDelete();
-          return false;
         }
+        return false;
       },
       background: Container(
         decoration: BoxDecoration(
@@ -929,11 +1253,16 @@ class _NoteListItem extends StatelessWidget {
             ),
             child: Row(
               children: [
+                if (note.mood.isNotEmpty)
+                  Padding(
+                    padding: const EdgeInsets.only(right: 12),
+                    child: Text(note.mood, style: const TextStyle(fontSize: 24)),
+                  ),
                 Container(
                   width: 4,
                   height: 50,
                   decoration: BoxDecoration(
-                    color: Theme.of(context).colorScheme.primary,
+                    color: const Color(0xFF6366F1),
                     borderRadius: BorderRadius.circular(2),
                   ),
                 ),
@@ -976,23 +1305,9 @@ class _NoteListItem extends StatelessWidget {
                   ),
                 ),
                 const SizedBox(width: 8),
-                Column(
-                  crossAxisAlignment: CrossAxisAlignment.end,
-                  children: [
-                    ...note.tags.take(1).map((tag) => Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                      decoration: BoxDecoration(
-                        color: Colors.black.withOpacity(0.05),
-                        borderRadius: BorderRadius.circular(4),
-                      ),
-                      child: Text(tag, style: const TextStyle(fontSize: 10)),
-                    )),
-                    const SizedBox(height: 4),
-                    Text(
-                      _formatTime(note.createdAt),
-                      style: TextStyle(fontSize: 11, color: Colors.grey[500]),
-                    ),
-                  ],
+                Text(
+                  _formatTime(note.createdAt),
+                  style: TextStyle(fontSize: 11, color: Colors.grey[500]),
                 ),
               ],
             ),
@@ -1007,9 +1322,9 @@ class _NoteListItem extends StatelessWidget {
     final diff = now.difference(date);
     
     if (diff.inMinutes < 1) return '刚刚';
-    if (diff.inMinutes < 60) return '${diff.inMinutes}m';
-    if (diff.inHours < 24) return '${diff.inHours}h';
-    if (diff.inDays < 7) return '${diff.inDays}d';
+    if (diff.inMinutes < 60) return '${diff.inMinutes}分钟';
+    if (diff.inHours < 24) return '${diff.inHours}小时';
+    if (diff.inDays < 7) return '${diff.inDays}天';
     return '${date.month}/${date.day}';
   }
 }
@@ -1019,12 +1334,14 @@ class _NoteCompactItem extends StatelessWidget {
   final VoidCallback onTap;
   final VoidCallback onDelete;
   final VoidCallback onFavorite;
+  final bool isDark;
 
   const _NoteCompactItem({
     required this.note,
     required this.onTap,
     required this.onDelete,
     required this.onFavorite,
+    required this.isDark,
   });
 
   @override
@@ -1064,6 +1381,11 @@ class _NoteCompactItem extends StatelessWidget {
             ),
             child: Row(
               children: [
+                if (note.mood.isNotEmpty)
+                  Padding(
+                    padding: const EdgeInsets.only(right: 8),
+                    child: Text(note.mood, style: const TextStyle(fontSize: 18)),
+                  ),
                 if (note.isFavorite)
                   const Padding(
                     padding: EdgeInsets.only(right: 6),
@@ -1094,9 +1416,9 @@ class _NoteCompactItem extends StatelessWidget {
     final diff = now.difference(date);
     
     if (diff.inMinutes < 1) return '刚刚';
-    if (diff.inMinutes < 60) return '${diff.inMinutes}m';
-    if (diff.inHours < 24) return '${diff.inHours}h';
-    if (diff.inDays < 7) return '${diff.inDays}d';
+    if (diff.inMinutes < 60) return '${diff.inMinutes}分钟';
+    if (diff.inHours < 24) return '${diff.inHours}小时';
+    if (diff.inDays < 7) return '${diff.inDays}天';
     return '${date.month}/${date.day}';
   }
 }
@@ -1117,10 +1439,22 @@ class _NoteEditorPageState extends State<NoteEditorPage> with SingleTickerProvid
   int _selectedColor = 0xFFFFF5E6;
   List<String> _tags = [];
   bool _isEditing = false;
+  String _selectedMood = '';
   
   final List<int> _colors = [
     0xFFFFF5E6, 0xFFE6F7FF, 0xFFF6FFED, 0xFFFFF0E6, 0xFFF0E6FF,
     0xFFFFE6E6, 0xFFE6FFE6, 0xFFE6FFFF,
+  ];
+
+  final List<Map<String, String>> _moods = [
+    {'emoji': '✨', 'label': '灵感'},
+    {'emoji': '💡', 'label': '想法'},
+    {'emoji': '🎯', 'label': '目标'},
+    {'emoji': '📝', 'label': '记录'},
+    {'emoji': '💭', 'label': '思考'},
+    {'emoji': '🔥', 'label': '热血'},
+    {'emoji': '🎨', 'label': '创意'},
+    {'emoji': '📚', 'label': '学习'},
   ];
   
   late AnimationController _colorAnimationController;
@@ -1143,6 +1477,7 @@ class _NoteEditorPageState extends State<NoteEditorPage> with SingleTickerProvid
       _contentController.text = widget.note!.content;
       _selectedColor = widget.note!.color;
       _tags = List.from(widget.note!.tags);
+      _selectedMood = widget.note!.mood;
       _isEditing = true;
     }
     _colorAnimationController.forward();
@@ -1159,12 +1494,13 @@ class _NoteEditorPageState extends State<NoteEditorPage> with SingleTickerProvid
 
     final note = Note(
       id: widget.note?.id ?? DateTime.now().millisecondsSinceEpoch.toString(),
-      title: title.isEmpty ? '无标题笔记' : title,
+      title: title.isEmpty ? '💭 无标题笔记' : title,
       content: content,
       color: _selectedColor,
       tags: _tags,
       createdAt: widget.note?.createdAt ?? DateTime.now(),
       isFavorite: widget.note?.isFavorite ?? false,
+      mood: _selectedMood,
     );
 
     Navigator.pop(context, note);
@@ -1172,9 +1508,7 @@ class _NoteEditorPageState extends State<NoteEditorPage> with SingleTickerProvid
 
   void _addTag() {
     final tag = _tagController.text.trim();
-    if (tag.isEmpty) {
-      return;
-    }
+    if (tag.isEmpty) return;
     if (_tags.contains(tag)) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text('标签 "$tag" 已存在'), duration: const Duration(seconds: 1)),
@@ -1201,20 +1535,22 @@ class _NoteEditorPageState extends State<NoteEditorPage> with SingleTickerProvid
 
   @override
   Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+
     return Scaffold(
       backgroundColor: Color(_selectedColor),
       appBar: AppBar(
         backgroundColor: Colors.transparent,
         elevation: 0,
         leading: IconButton(
-          icon: const Icon(Icons.close),
+          icon: Icon(Icons.close, color: isDark ? Colors.white70 : Colors.grey[700]),
           onPressed: () => Navigator.pop(context),
         ),
         actions: [
           TextButton.icon(
             onPressed: _saveNote,
-            icon: const Icon(Icons.check),
-            label: Text(_isEditing ? '更新' : '保存'),
+            icon: Icon(Icons.check, color: isDark ? Colors.white70 : const Color(0xFF6366F1)),
+            label: Text(_isEditing ? '更新' : '保存', style: TextStyle(color: isDark ? Colors.white70 : const Color(0xFF6366F1))),
           ),
         ],
       ),
@@ -1230,13 +1566,13 @@ class _NoteEditorPageState extends State<NoteEditorPage> with SingleTickerProvid
                   children: [
                     TextField(
                       controller: _titleController,
-                      decoration: const InputDecoration(
-                        hintText: '标题',
+                      decoration: InputDecoration(
+                        hintText: '📝 给笔记起个标题...',
                         border: InputBorder.none,
                         hintStyle: TextStyle(
                           fontSize: 24,
                           fontWeight: FontWeight.bold,
-                          color: Color(0xFFBBBBBB),
+                          color: Colors.grey[400],
                         ),
                       ),
                       style: const TextStyle(
@@ -1246,13 +1582,13 @@ class _NoteEditorPageState extends State<NoteEditorPage> with SingleTickerProvid
                       ),
                       autofocus: !_isEditing,
                     ),
-                    const SizedBox(height: 8),
+                    const SizedBox(height: 16),
                     TextField(
                       controller: _contentController,
-                      decoration: const InputDecoration(
-                        hintText: '开始记录...',
+                      decoration: InputDecoration(
+                        hintText: '开始记录你的想法...',
                         border: InputBorder.none,
-                        hintStyle: TextStyle(color: Color(0xFFBBBBBB)),
+                        hintStyle: TextStyle(color: Colors.grey[400]),
                       ),
                       style: const TextStyle(
                         fontSize: 16,
@@ -1263,16 +1599,71 @@ class _NoteEditorPageState extends State<NoteEditorPage> with SingleTickerProvid
                       minLines: 10,
                       keyboardType: TextInputType.multiline,
                     ),
-                    const SizedBox(height: 16),
+                    const SizedBox(height: 20),
+                    Text(
+                      '🎭 选择心情',
+                      style: TextStyle(
+                        fontSize: 14,
+                        fontWeight: FontWeight.w600,
+                        color: Colors.grey[600],
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    Wrap(
+                      spacing: 8,
+                      runSpacing: 8,
+                      children: _moods.map((mood) {
+                        final isSelected = _selectedMood == mood['emoji'];
+                        return GestureDetector(
+                          onTap: () {
+                            setState(() {
+                              _selectedMood = isSelected ? '' : mood['emoji']!;
+                            });
+                          },
+                          child: AnimatedContainer(
+                            duration: const Duration(milliseconds: 200),
+                            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                            decoration: BoxDecoration(
+                              color: isSelected ? const Color(0xFF6366F1) : Colors.white,
+                              borderRadius: BorderRadius.circular(20),
+                              border: Border.all(
+                                color: isSelected ? const Color(0xFF6366F1) : Colors.grey[300]!,
+                              ),
+                              boxShadow: isSelected
+                                  ? [BoxShadow(
+                                      color: const Color(0xFF6366F1).withOpacity(0.3),
+                                      blurRadius: 8,
+                                    )]
+                                  : null,
+                            ),
+                            child: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Text(mood['emoji']!, style: const TextStyle(fontSize: 18)),
+                                const SizedBox(width: 4),
+                                Text(
+                                  mood['label']!,
+                                  style: TextStyle(
+                                    fontSize: 12,
+                                    color: isSelected ? Colors.white : Colors.grey[700],
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        );
+                      }).toList(),
+                    ),
+                    const SizedBox(height: 20),
                     if (_tags.isNotEmpty)
                       Padding(
-                        padding: const EdgeInsets.only(bottom: 8),
+                        padding: const EdgeInsets.only(bottom: 12),
                         child: Wrap(
                           spacing: 8,
                           runSpacing: 8,
                           children: _tags.map((tag) {
                             return Chip(
-                              label: Text(tag, style: const TextStyle(fontSize: 12)),
+                              label: Text('#$tag', style: const TextStyle(fontSize: 12)),
                               deleteIcon: Container(
                                 padding: const EdgeInsets.all(2),
                                 decoration: BoxDecoration(
@@ -1293,18 +1684,18 @@ class _NoteEditorPageState extends State<NoteEditorPage> with SingleTickerProvid
                 ),
               ),
             ),
-            _buildBottomBar(),
+            _buildBottomBar(isDark),
           ],
         ),
       ),
     );
   }
 
-  Widget _buildBottomBar() {
+  Widget _buildBottomBar(bool isDark) {
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: isDark ? const Color(0xFF1E1E1E) : Colors.white,
         boxShadow: [
           BoxShadow(
             color: Colors.black.withOpacity(0.05),
@@ -1319,22 +1710,24 @@ class _NoteEditorPageState extends State<NoteEditorPage> with SingleTickerProvid
           children: [
             Row(
               children: [
-                const Icon(Icons.label_outline, size: 20, color: Color(0xFF999999)),
+                Icon(Icons.label_outline, size: 20, color: isDark ? Colors.white54 : Colors.grey[600]),
                 const SizedBox(width: 8),
                 Expanded(
                   child: TextField(
                     controller: _tagController,
-                    decoration: const InputDecoration(
+                    decoration: InputDecoration(
                       hintText: '添加标签...',
                       border: InputBorder.none,
                       isDense: true,
-                      contentPadding: EdgeInsets.symmetric(vertical: 8),
+                      contentPadding: const EdgeInsets.symmetric(vertical: 8),
+                      hintStyle: TextStyle(color: isDark ? Colors.white38 : Colors.grey[400]),
                     ),
+                    style: TextStyle(color: isDark ? Colors.white : Colors.black87),
                     onSubmitted: (_) => _addTag(),
                   ),
                 ),
                 IconButton(
-                  icon: const Icon(Icons.add),
+                  icon: Icon(Icons.add_circle, color: isDark ? Colors.white54 : const Color(0xFF6366F1)),
                   onPressed: _addTag,
                 ),
               ],
@@ -1360,23 +1753,19 @@ class _NoteEditorPageState extends State<NoteEditorPage> with SingleTickerProvid
                         color: Color(_colors[index]),
                         borderRadius: BorderRadius.circular(12),
                         border: isSelected
-                            ? Border.all(color: Theme.of(context).colorScheme.primary, width: 3)
+                            ? Border.all(color: const Color(0xFF6366F1), width: 3)
                             : Border.all(color: Colors.grey[300]!, width: 1),
                         boxShadow: isSelected
                             ? [
                                 BoxShadow(
-                                  color: Theme.of(context).colorScheme.primary.withOpacity(0.3),
+                                  color: const Color(0xFF6366F1).withOpacity(0.3),
                                   blurRadius: 8,
                                 ),
                               ]
                             : null,
                       ),
                       child: isSelected
-                          ? Icon(
-                              Icons.check,
-                              color: Theme.of(context).colorScheme.primary,
-                              size: 20,
-                            )
+                          ? const Icon(Icons.check, color: Color(0xFF6366F1), size: 20)
                           : null,
                     ),
                   );
@@ -1407,6 +1796,7 @@ class Note {
   final List<String> tags;
   final DateTime createdAt;
   final bool isFavorite;
+  final String mood;
 
   Note({
     required this.id,
@@ -1416,6 +1806,7 @@ class Note {
     required this.tags,
     required this.createdAt,
     this.isFavorite = false,
+    this.mood = '',
   });
 
   Note copyWith({
@@ -1426,6 +1817,7 @@ class Note {
     List<String>? tags,
     DateTime? createdAt,
     bool? isFavorite,
+    String? mood,
   }) {
     return Note(
       id: id ?? this.id,
@@ -1435,6 +1827,7 @@ class Note {
       tags: tags ?? this.tags,
       createdAt: createdAt ?? this.createdAt,
       isFavorite: isFavorite ?? this.isFavorite,
+      mood: mood ?? this.mood,
     );
   }
 
@@ -1446,6 +1839,7 @@ class Note {
         'tags': tags,
         'createdAt': createdAt.toIso8601String(),
         'isFavorite': isFavorite,
+        'mood': mood,
       };
 
   factory Note.fromJson(Map<String, dynamic> json) => Note(
@@ -1456,6 +1850,7 @@ class Note {
         tags: List<String>.from(json['tags'] ?? []),
         createdAt: DateTime.parse(json['createdAt']),
         isFavorite: json['isFavorite'] ?? false,
+        mood: json['mood'] ?? '',
       );
 }
 
