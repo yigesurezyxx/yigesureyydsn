@@ -281,10 +281,15 @@ class _NoteHomePageState extends State<NoteHomePage> with TickerProviderStateMix
     _showSnackBar('🗑️ 搜索历史已清除', Icons.delete_sweep, Colors.grey);
   }
 
+  bool _demoNotesAdded = false;
+
   void _addDemoNotes() {
+    if (_demoNotesAdded) return;
+    _demoNotesAdded = true;
+    
     final demoNotes = [
       Note(
-        id: DateTime.now().millisecondsSinceEpoch.toString(),
+        id: 'demo_${DateTime.now().millisecondsSinceEpoch}_1',
         title: '🎨 设计灵感',
         content: '好的设计是尽可能少的设计。让功能自然而然地呈现，而不是堆砌。',
         color: 0xFFFFF5E6,
@@ -294,7 +299,7 @@ class _NoteHomePageState extends State<NoteHomePage> with TickerProviderStateMix
         mood: '✨',
       ),
       Note(
-        id: (DateTime.now().millisecondsSinceEpoch - 1000000).toString(),
+        id: 'demo_${DateTime.now().millisecondsSinceEpoch}_2',
         title: '💡 产品思考',
         content: '用户需要的是简单易用的产品，而不是功能复杂的技术展示。',
         color: 0xFFE6F7FF,
@@ -303,7 +308,7 @@ class _NoteHomePageState extends State<NoteHomePage> with TickerProviderStateMix
         mood: '💡',
       ),
       Note(
-        id: (DateTime.now().millisecondsSinceEpoch - 2000000).toString(),
+        id: 'demo_${DateTime.now().millisecondsSinceEpoch}_3',
         title: '📋 本周任务',
         content: '1. 完成核心功能开发\n2. 优化用户体验\n3. 收集用户反馈',
         color: 0xFFF6FFED,
