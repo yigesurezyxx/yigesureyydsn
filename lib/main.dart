@@ -111,7 +111,14 @@ class YeahApp extends StatelessWidget {
 }
 
 class NoteHomePage extends StatefulWidget {
-  const NoteHomePage({super.key});
+  final Function(AppTheme) onThemeChanged;
+  final AppTheme currentTheme;
+
+  const NoteHomePage({
+    super.key,
+    required this.onThemeChanged,
+    required this.currentTheme,
+  });
 
   @override
   State<NoteHomePage> createState() => _NoteHomePageState();
@@ -648,6 +655,22 @@ class _NoteHomePageState extends State<NoteHomePage> with TickerProviderStateMix
     );
   }
 
+  void _showThemeSelector() {
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (context) => _ThemeSelectorSheet(
+        currentTheme: widget.currentTheme,
+        onSelectTheme: (theme) {
+          Navigator.pop(context);
+          widget.onThemeChanged(theme);
+          _showSnackBar('✨ 已切换到${theme.icon} ${theme.name}', Icons.check_circle, theme.primaryColor);
+        },
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
@@ -814,6 +837,8 @@ class _NoteHomePageState extends State<NoteHomePage> with TickerProviderStateMix
               await _exportNotes();
             } else if (value == 'import') {
               await _importNotes();
+            } else if (value == 'theme') {
+              _showThemeSelector();
             }
           },
           itemBuilder: (context) => [
@@ -834,6 +859,16 @@ class _NoteHomePageState extends State<NoteHomePage> with TickerProviderStateMix
                   Icon(Icons.download, color: Colors.blue),
                   SizedBox(width: 8),
                   Text('📥 导入笔记'),
+                ],
+              ),
+            ),
+            PopupMenuItem(
+              value: 'theme',
+              child: Row(
+                children: [
+                  Icon(Icons.palette, color: widget.currentTheme.primaryColor),
+                  const SizedBox(width: 8),
+                  Text('🎨 ${widget.currentTheme.icon} 主题'),
                 ],
               ),
             ),
@@ -1882,6 +1917,165 @@ class _NoteCompactItem extends StatelessWidget {
     if (diff.inHours < 24) return '${diff.inHours}小时';
     if (diff.inDays < 7) return '${diff.inDays}天';
     return '${date.month}/${date.day}';
+  }
+}
+
+class _ThemeSelectorSheet extends StatelessWidget {
+  final AppTheme currentTheme;
+  final Function(AppTheme) onSelectTheme;
+
+  const _ThemeSelectorSheet({
+    required this.currentTheme,
+    required this.onSelectTheme,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final themes = ThemeService.appThemes;
+
+    return Container(
+      constraints: BoxConstraints(
+        maxHeight: MediaQuery.of(context).size.height * 0.75,
+      ),
+      decoration: BoxDecoration(
+        color: isDark ? const Color(0xFF1E1E1E) : Colors.white,
+        borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
+      ),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Container(
+            margin: const EdgeInsets.only(top: 12),
+            width: 40,
+            height: 4,
+            decoration: BoxDecoration(
+              color: isDark ? Colors.white24 : Colors.grey[300],
+              borderRadius: BorderRadius.circular(2),
+            ),
+          ),
+          Padding(
+            padding: const EdgeInsets.all(20),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  '🎨 选择主题',
+                  style: TextStyle(
+                    fontSize: 22,
+                    fontWeight: FontWeight.bold,
+                    color: isDark ? Colors.white : Colors.black87,
+                  ),
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  '个性化你的应用外观',
+                  style: TextStyle(
+                    fontSize: 14,
+                    color: isDark ? Colors.white54 : Colors.grey[600],
+                  ),
+                ),
+              ],
+            ),
+          ),
+          Expanded(
+            child: GridView.builder(
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+              gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+                crossAxisCount: 2,
+                childAspectRatio: 1.5,
+                crossAxisSpacing: 12,
+                mainAxisSpacing: 12,
+              ),
+              itemCount: themes.length,
+              itemBuilder: (context, index) {
+                final theme = themes[index];
+                final isSelected = theme.id == currentTheme.id;
+                return _ThemeCard(
+                  theme: theme,
+                  isSelected: isSelected,
+                  isDark: isDark,
+                  onTap: () => onSelectTheme(theme),
+                );
+              },
+            ),
+          ),
+          const SizedBox(height: 20),
+        ],
+      ),
+    );
+  }
+}
+
+class _ThemeCard extends StatelessWidget {
+  final AppTheme theme;
+  final bool isSelected;
+  final bool isDark;
+  final VoidCallback onTap;
+
+  const _ThemeCard({
+    required this.theme,
+    required this.isSelected,
+    required this.isDark,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(16),
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 200),
+          decoration: BoxDecoration(
+            color: theme.backgroundColor,
+            borderRadius: BorderRadius.circular(16),
+            border: Border.all(
+              color: isSelected ? theme.primaryColor : (isDark ? Colors.white12 : Colors.grey[200]!),
+              width: isSelected ? 3 : 1,
+            ),
+            boxShadow: isSelected
+                ? [
+                    BoxShadow(
+                      color: theme.primaryColor.withOpacity(0.3),
+                      blurRadius: 12,
+                      offset: const Offset(0, 4),
+                    ),
+                  ]
+                : null,
+          ),
+          padding: const EdgeInsets.all(16),
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Text(
+                theme.icon,
+                style: const TextStyle(fontSize: 32),
+              ),
+              const SizedBox(height: 8),
+              Text(
+                theme.name,
+                style: TextStyle(
+                  fontSize: 14,
+                  fontWeight: FontWeight.w600,
+                  color: isDark ? Colors.white : Colors.black87,
+                ),
+              ),
+              if (isSelected) ...[
+                const SizedBox(height: 4),
+                Icon(
+                  Icons.check_circle,
+                  size: 16,
+                  color: theme.primaryColor,
+                ),
+              ],
+            ],
+          ),
+        ),
+      ),
+    );
   }
 }
 
