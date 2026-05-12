@@ -21,44 +21,49 @@ void main() {
   runApp(const YeahApp());
 }
 
-class YeahApp extends StatelessWidget {
+class YeahApp extends StatefulWidget {
   const YeahApp({super.key});
+
+  @override
+  State<YeahApp> createState() => _YeahAppState();
+}
+
+class _YeahAppState extends State<YeahApp> {
+  AppTheme _currentTheme = ThemeService.appThemes[0];
+
+  @override
+  void initState() {
+    super.initState();
+    _loadTheme();
+  }
+
+  Future<void> _loadTheme() async {
+    final theme = await ThemeService.loadSavedTheme();
+    if (mounted) {
+      setState(() {
+        _currentTheme = theme;
+      });
+    }
+  }
+
+  void _changeTheme(AppTheme theme) async {
+    await ThemeService.saveTheme(theme.id);
+    setState(() {
+      _currentTheme = theme;
+    });
+  }
 
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
       title: 'yeah',
       debugShowCheckedModeBanner: false,
-      theme: ThemeData(
-        useMaterial3: true,
-        brightness: Brightness.light,
-        colorScheme: ColorScheme.fromSeed(
-          seedColor: const Color(0xFF6366F1),
-          brightness: Brightness.light,
-        ),
-        fontFamily: 'Roboto',
-        scaffoldBackgroundColor: const Color(0xFFF8F9FA),
-        appBarTheme: const AppBarTheme(
-          centerTitle: true,
-          elevation: 0,
-        ),
-      ),
-      darkTheme: ThemeData(
-        useMaterial3: true,
-        brightness: Brightness.dark,
-        colorScheme: ColorScheme.fromSeed(
-          seedColor: const Color(0xFF6366F1),
-          brightness: Brightness.dark,
-        ),
-        fontFamily: 'Roboto',
-        scaffoldBackgroundColor: const Color(0xFF121212),
-        appBarTheme: const AppBarTheme(
-          centerTitle: true,
-          elevation: 0,
-        ),
-      ),
+      theme: _currentTheme.toThemeData(),
       themeMode: ThemeMode.system,
-      home: const NoteHomePage(),
+      home: NoteHomePage(
+        onThemeChanged: _changeTheme,
+        currentTheme: _currentTheme,
+      ),
     );
   }
 }
@@ -436,67 +441,47 @@ class _NoteHomePageState extends State<NoteHomePage> with TickerProviderStateMix
       builder: (context) => _TemplateSelectorSheet(
         onSelectTemplate: (template) {
           Navigator.pop(context);
-          final note = template.createNote();
-          Navigator.push(
-            context,
-            PageRouteBuilder(
-              pageBuilder: (_, animation, __) => NoteEditorPage(note: note, isFromTemplate: true),
-              transitionsBuilder: (_, animation, __, child) {
-                return SlideTransition(
-                  position: Tween<Offset>(
-                    begin: const Offset(0, 1),
-                    end: Offset.zero,
-                  ).animate(CurvedAnimation(
-                    parent: animation,
-                    curve: Curves.easeOutCubic,
-                  )),
-                  child: child,
-                );
-              },
-              transitionDuration: const Duration(milliseconds: 400),
-            ),
-          ).then((newNote) {
-            if (newNote != null && newNote is Note) {
-              setState(() {
-                _notes.insert(0, newNote);
-                _applyFilters();
-              });
-              _showSnackBar('✨ 笔记已创建', Icons.check_circle, Colors.green);
-            }
-          });
+          _navigateToEditor(template.createNote());
         },
         onSkip: () {
           Navigator.pop(context);
-          Navigator.push(
-            context,
-            PageRouteBuilder(
-              pageBuilder: (_, animation, __) => const NoteEditorPage(),
-              transitionsBuilder: (_, animation, __, child) {
-                return SlideTransition(
-                  position: Tween<Offset>(
-                    begin: const Offset(0, 1),
-                    end: Offset.zero,
-                  ).animate(CurvedAnimation(
-                    parent: animation,
-                    curve: Curves.easeOutCubic,
-                  )),
-                  child: child,
-                );
-              },
-              transitionDuration: const Duration(milliseconds: 400),
-            ),
-          ).then((newNote) {
-            if (newNote != null && newNote is Note) {
-              setState(() {
-                _notes.insert(0, newNote);
-                _applyFilters();
-              });
-              _showSnackBar('✨ 笔记已创建', Icons.check_circle, Colors.green);
-            }
-          });
+          _navigateToEditor(null);
         },
       ),
     );
+  }
+
+  void _navigateToEditor(Note? note) {
+    Navigator.push(
+      context,
+      PageRouteBuilder(
+        pageBuilder: (_, animation, __) => NoteEditorPage(
+          note: note,
+          isFromTemplate: note != null,
+        ),
+        transitionsBuilder: (_, animation, __, child) {
+          return SlideTransition(
+            position: Tween<Offset>(
+              begin: const Offset(0, 1),
+              end: Offset.zero,
+            ).animate(CurvedAnimation(
+              parent: animation,
+              curve: Curves.easeOutCubic,
+            )),
+            child: child,
+          );
+        },
+        transitionDuration: const Duration(milliseconds: 400),
+      ),
+    ).then((newNote) {
+      if (newNote != null && newNote is Note) {
+        setState(() {
+          _notes.insert(0, newNote);
+          _applyFilters();
+        });
+        _showSnackBar('✨ 笔记已创建', Icons.check_circle, Colors.green);
+      }
+    });
   }
 
   void _editNote(Note note) {
@@ -3083,6 +3068,148 @@ class NoteTemplateService {
 }
 
 enum ViewMode { grid, list, compact }
+
+class AppTheme {
+  final String id;
+  final String name;
+  final String icon;
+  final Color primaryColor;
+  final Color backgroundColor;
+  final Color surfaceColor;
+  final Brightness brightness;
+
+  const AppTheme({
+    required this.id,
+    required this.name,
+    required this.icon,
+    required this.primaryColor,
+    required this.backgroundColor,
+    required this.surfaceColor,
+    required this.brightness,
+  });
+
+  ThemeData toThemeData() {
+    return ThemeData(
+      useMaterial3: true,
+      brightness: brightness,
+      colorScheme: ColorScheme.fromSeed(
+        seedColor: primaryColor,
+        brightness: brightness,
+        surface: surfaceColor,
+      ),
+      fontFamily: 'Roboto',
+      scaffoldBackgroundColor: backgroundColor,
+      appBarTheme: AppBarTheme(
+        centerTitle: true,
+        elevation: 0,
+        backgroundColor: backgroundColor,
+      ),
+    );
+  }
+}
+
+class ThemeService {
+  static const List<AppTheme> appThemes = [
+    AppTheme(
+      id: 'default',
+      name: '默认紫',
+      icon: '💜',
+      primaryColor: Color(0xFF6366F1),
+      backgroundColor: Color(0xFFF8F9FA),
+      surfaceColor: Color(0xFFFFFFFF),
+      brightness: Brightness.light,
+    ),
+    AppTheme(
+      id: 'blue',
+      name: '清新蓝',
+      icon: '💙',
+      primaryColor: Color(0xFF3B82F6),
+      backgroundColor: Color(0xFFF0F9FF),
+      surfaceColor: Color(0xFFFFFFFF),
+      brightness: Brightness.light,
+    ),
+    AppTheme(
+      id: 'green',
+      name: '自然绿',
+      icon: '💚',
+      primaryColor: Color(0xFF10B981),
+      backgroundColor: Color(0xFFF0FDF4),
+      surfaceColor: Color(0xFFFFFFFF),
+      brightness: Brightness.light,
+    ),
+    AppTheme(
+      id: 'pink',
+      name: '可爱粉',
+      icon: '💗',
+      primaryColor: Color(0xFFEC4899),
+      backgroundColor: Color(0xFFFDF2F8),
+      surfaceColor: Color(0xFFFFFFFF),
+      brightness: Brightness.light,
+    ),
+    AppTheme(
+      id: 'orange',
+      name: '活力橙',
+      icon: '🧡',
+      primaryColor: Color(0xFFF59E0B),
+      backgroundColor: Color(0xFFFFFBEB),
+      surfaceColor: Color(0xFFFFFFFF),
+      brightness: Brightness.light,
+    ),
+    AppTheme(
+      id: 'red',
+      name: '热情红',
+      icon: '❤️',
+      primaryColor: Color(0xFFEF4444),
+      backgroundColor: Color(0xFFFEF2F2),
+      surfaceColor: Color(0xFFFFFFFF),
+      brightness: Brightness.light,
+    ),
+    AppTheme(
+      id: 'dark',
+      name: '深邃黑',
+      icon: '🌙',
+      primaryColor: Color(0xFF6366F1),
+      backgroundColor: Color(0xFF121212),
+      surfaceColor: Color(0xFF1E1E1E),
+      brightness: Brightness.dark,
+    ),
+    AppTheme(
+      id: 'dark_blue',
+      name: '星空蓝',
+      icon: '🌌',
+      primaryColor: Color(0xFF3B82F6),
+      backgroundColor: Color(0xFF0F172A),
+      surfaceColor: Color(0xFF1E293B),
+      brightness: Brightness.dark,
+    ),
+  ];
+
+  static AppTheme getThemeById(String id) {
+    return appThemes.firstWhere(
+      (theme) => theme.id == id,
+      orElse: () => appThemes[0],
+    );
+  }
+
+  static Future<AppTheme> loadSavedTheme() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final themeId = prefs.getString('appThemeId') ?? 'default';
+      return getThemeById(themeId);
+    } catch (e) {
+      return appThemes[0];
+    }
+  }
+
+  static Future<void> saveTheme(String themeId) async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setString('appThemeId', themeId);
+    } catch (e) {
+      debugPrint('保存主题失败: $e');
+    }
+  }
+}
 
 class DatabaseService {
   static Database? _database;
