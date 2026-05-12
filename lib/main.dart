@@ -63,6 +63,48 @@ class YeahApp extends StatelessWidget {
   }
 }
 
+class YeahApp extends StatelessWidget {
+  const YeahApp({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return MaterialApp(
+      title: 'yeah',
+      debugShowCheckedModeBanner: false,
+      theme: ThemeData(
+        useMaterial3: true,
+        brightness: Brightness.light,
+        colorScheme: ColorScheme.fromSeed(
+          seedColor: const Color(0xFF6366F1),
+          brightness: Brightness.light,
+        ),
+        fontFamily: 'Roboto',
+        scaffoldBackgroundColor: const Color(0xFFF8F9FA),
+        appBarTheme: const AppBarTheme(
+          centerTitle: true,
+          elevation: 0,
+        ),
+      ),
+      darkTheme: ThemeData(
+        useMaterial3: true,
+        brightness: Brightness.dark,
+        colorScheme: ColorScheme.fromSeed(
+          seedColor: const Color(0xFF6366F1),
+          brightness: Brightness.dark,
+        ),
+        fontFamily: 'Roboto',
+        scaffoldBackgroundColor: const Color(0xFF121212),
+        appBarTheme: const AppBarTheme(
+          centerTitle: true,
+          elevation: 0,
+        ),
+      ),
+      themeMode: ThemeMode.system,
+      home: const NoteHomePage(),
+    );
+  }
+}
+
 class NoteHomePage extends StatefulWidget {
   const NoteHomePage({super.key});
 
@@ -1728,11 +1770,14 @@ class _NoteEditorPageState extends State<NoteEditorPage> with SingleTickerProvid
   final TextEditingController _titleController = TextEditingController();
   final TextEditingController _contentController = TextEditingController();
   final TextEditingController _tagController = TextEditingController();
+  final FocusNode _contentFocusNode = FocusNode();
   int _selectedColor = 0xFFFFF5E6;
   final List<String> _tags = [];
   String _selectedMood = '';
   bool _isSaved = true;
   Timer? _autoSaveTimer;
+  bool _showFormattingBar = false;
+  final List<String> _images = [];
   
   final List<int> _colors = [
     0xFFFFF5E6, 0xFFE6F7FF, 0xFFF6FFED, 0xFFFFF0E6, 0xFFF0E6FF,
@@ -1771,12 +1816,20 @@ class _NoteEditorPageState extends State<NoteEditorPage> with SingleTickerProvid
       _selectedColor = widget.note!.color;
       _tags.addAll(widget.note!.tags);
       _selectedMood = widget.note!.mood;
+      _images.addAll(widget.note!.images);
     }
     
     _titleController.addListener(_onContentChanged);
     _contentController.addListener(_onContentChanged);
+    _contentFocusNode.addListener(_onFocusChanged);
     
     _colorAnimationController.forward();
+  }
+
+  void _onFocusChanged() {
+    setState(() {
+      _showFormattingBar = _contentFocusNode.hasFocus;
+    });
   }
 
   void _onContentChanged() {
@@ -1793,6 +1846,104 @@ class _NoteEditorPageState extends State<NoteEditorPage> with SingleTickerProvid
         _saveNote(silent: true);
       }
     });
+  }
+
+  void _applyFormatting(String prefix, String suffix) {
+    final text = _contentController.text;
+    final selection = _contentController.selection;
+    
+    if (selection.start == selection.end) {
+      final newText = text.substring(0, selection.start) + 
+                     prefix + suffix + 
+                     text.substring(selection.start);
+      _contentController.text = newText;
+      _contentController.selection = TextSelection.collapsed(
+        offset: selection.start + prefix.length,
+      );
+    } else {
+      final selectedText = text.substring(selection.start, selection.end);
+      final newText = text.substring(0, selection.start) + 
+                     prefix + selectedText + suffix + 
+                     text.substring(selection.end);
+      _contentController.text = newText;
+      _contentController.selection = TextSelection(
+        baseOffset: selection.start + prefix.length,
+        extentOffset: selection.start + prefix.length + selectedText.length,
+      );
+    }
+    _onContentChanged();
+  }
+
+  void _insertBulletPoint() {
+    final text = _contentController.text;
+    final selection = _contentController.selection;
+    final cursorPos = selection.start;
+    
+    int lineStart = cursorPos;
+    while (lineStart > 0 && text[lineStart - 1] != '\n') {
+      lineStart--;
+    }
+    
+    final newText = text.substring(0, lineStart) + '• ' + text.substring(lineStart);
+    _contentController.text = newText;
+    _contentController.selection = TextSelection.collapsed(
+      offset: cursorPos + 2,
+    );
+    _onContentChanged();
+  }
+
+  Future<void> _addImage() async {
+    try {
+      final ImagePicker picker = ImagePicker();
+      final XFile? image = await picker.pickImage(source: ImageSource.gallery);
+      
+      if (image != null) {
+        final directory = await getApplicationDocumentsDirectory();
+        final fileName = 'image_${DateTime.now().millisecondsSinceEpoch}.jpg';
+        final savedPath = path.join(directory.path, 'images', fileName);
+        
+        final imageDir = Directory(path.join(directory.path, 'images'));
+        if (!await imageDir.exists()) {
+          await imageDir.create(recursive: true);
+        }
+        
+        await File(image.path).copy(savedPath);
+        
+        setState(() {
+          _images.add(savedPath);
+        });
+        
+        final text = _contentController.text;
+        final selection = _contentController.selection;
+        final newText = text.substring(0, selection.start) + 
+                       '[图片]\n' + 
+                       text.substring(selection.start);
+        _contentController.text = newText;
+        _onContentChanged();
+        
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: const Text('✅ 图片已添加'),
+              behavior: SnackBarBehavior.floating,
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+              margin: const EdgeInsets.all(16),
+            ),
+          );
+        }
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('❌ 添加图片失败: $e'),
+            behavior: SnackBarBehavior.floating,
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+            margin: const EdgeInsets.all(16),
+          ),
+        );
+      }
+    }
   }
 
   void _saveNote({bool silent = false}) {
@@ -1813,6 +1964,7 @@ class _NoteEditorPageState extends State<NoteEditorPage> with SingleTickerProvid
       createdAt: widget.note?.createdAt ?? DateTime.now(),
       isFavorite: widget.note?.isFavorite ?? false,
       mood: _selectedMood,
+      images: _images,
     );
 
     setState(() => _isSaved = true);
@@ -2211,9 +2363,11 @@ class _NoteEditorPageState extends State<NoteEditorPage> with SingleTickerProvid
   void dispose() {
     _titleController.removeListener(_onContentChanged);
     _contentController.removeListener(_onContentChanged);
+    _contentFocusNode.removeListener(_onFocusChanged);
     _titleController.dispose();
     _contentController.dispose();
     _tagController.dispose();
+    _contentFocusNode.dispose();
     _colorAnimationController.dispose();
     _autoSaveTimer?.cancel();
     super.dispose();
