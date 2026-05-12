@@ -1,6 +1,5 @@
 import 'dart:async';
 import 'dart:convert';
-import 'dart:math';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -10,7 +9,7 @@ void main() {
   SystemChrome.setSystemUIOverlayStyle(
     const SystemUiOverlayStyle(
       statusBarColor: Colors.transparent,
-      statusBarIconBrightness: Brightness.dark,
+      statusBarIconBrightness: Brightness.light,
     ),
   );
   runApp(const YeahApp());
@@ -32,6 +31,7 @@ class YeahApp extends StatelessWidget {
           brightness: Brightness.light,
         ),
         fontFamily: 'Roboto',
+        scaffoldBackgroundColor: const Color(0xFFF8F9FA),
       ),
       darkTheme: ThemeData(
         useMaterial3: true,
@@ -41,6 +41,7 @@ class YeahApp extends StatelessWidget {
           brightness: Brightness.dark,
         ),
         fontFamily: 'Roboto',
+        scaffoldBackgroundColor: const Color(0xFF121212),
       ),
       themeMode: ThemeMode.system,
       home: const NoteHomePage(),
@@ -62,13 +63,11 @@ class _NoteHomePageState extends State<NoteHomePage> with TickerProviderStateMix
   bool _isLoading = true;
   ViewMode _viewMode = ViewMode.grid;
   String _sortBy = 'date';
-  Set<String> _selectedTags = {};
-  bool _isDarkMode = false;
+  final Set<String> _selectedTags = {};
   
   final TextEditingController _searchController = TextEditingController();
   late AnimationController _fabAnimationController;
   late AnimationController _refreshAnimationController;
-  late AnimationController _searchAnimationController;
 
   @override
   void initState() {
@@ -81,26 +80,31 @@ class _NoteHomePageState extends State<NoteHomePage> with TickerProviderStateMix
       vsync: this,
       duration: const Duration(milliseconds: 800),
     );
-    _searchAnimationController = AnimationController(
-      vsync: this,
-      duration: const Duration(milliseconds: 200),
-    );
     _loadNotes();
     _refreshAnimationController.repeat();
-    _isDarkMode = MediaQuery.platformBrightnessOf(context) == Brightness.dark;
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
   }
 
   Future<void> _loadNotes() async {
-    final prefs = await SharedPreferences.getInstance();
-    final notesJson = prefs.getString('notes');
-    if (notesJson != null) {
-      final List<dynamic> notesList = json.decode(notesJson);
-      setState(() {
-        _notes.addAll(notesList.map((json) => Note.fromJson(json)));
-        _applyFilters();
-        _isLoading = false;
-      });
-    } else {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final notesJson = prefs.getString('notes');
+      if (notesJson != null && notesJson.isNotEmpty) {
+        final List<dynamic> notesList = json.decode(notesJson);
+        setState(() {
+          _notes.addAll(notesList.map((json) => Note.fromJson(json)));
+          _applyFilters();
+          _isLoading = false;
+        });
+      } else {
+        _addDemoNotes();
+        setState(() => _isLoading = false);
+      }
+    } catch (e) {
       _addDemoNotes();
       setState(() => _isLoading = false);
     }
@@ -119,7 +123,7 @@ class _NoteHomePageState extends State<NoteHomePage> with TickerProviderStateMix
         mood: '✨',
       ),
       Note(
-        id: (DateTime.now().millisecondsSinceEpoch - 1).toString(),
+        id: (DateTime.now().millisecondsSinceEpoch - 1000).toString(),
         title: '💡 产品思考',
         content: '用户需要的是简单易用的产品，而不是功能复杂的技术展示。',
         color: 0xFFE6F7FF,
@@ -128,7 +132,7 @@ class _NoteHomePageState extends State<NoteHomePage> with TickerProviderStateMix
         mood: '💡',
       ),
       Note(
-        id: (DateTime.now().millisecondsSinceEpoch - 2).toString(),
+        id: (DateTime.now().millisecondsSinceEpoch - 2000).toString(),
         title: '📋 本周任务',
         content: '1. 完成核心功能开发\n2. 优化用户体验\n3. 收集用户反馈',
         color: 0xFFF6FFED,
@@ -143,17 +147,22 @@ class _NoteHomePageState extends State<NoteHomePage> with TickerProviderStateMix
   }
 
   Future<void> _saveNotes() async {
-    final prefs = await SharedPreferences.getInstance();
-    final notesJson = json.encode(_notes.map((n) => n.toJson()).toList());
-    await prefs.setString('notes', notesJson);
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final notesJson = json.encode(_notes.map((n) => n.toJson()).toList());
+      await prefs.setString('notes', notesJson);
+    } catch (e) {
+      debugPrint('保存笔记失败: $e');
+    }
   }
 
   void _applyFilters() {
     _filteredNotes = _notes.where((note) {
+      final searchLower = _searchQuery.toLowerCase();
       final matchesSearch = _searchQuery.isEmpty ||
-          note.title.toLowerCase().contains(_searchQuery.toLowerCase()) ||
-          note.content.toLowerCase().contains(_searchQuery.toLowerCase()) ||
-          note.tags.any((tag) => tag.toLowerCase().contains(_searchQuery.toLowerCase()));
+          note.title.toLowerCase().contains(searchLower) ||
+          note.content.toLowerCase().contains(searchLower) ||
+          note.tags.any((tag) => tag.toLowerCase().contains(searchLower));
       
       final matchesTags = _selectedTags.isEmpty ||
           note.tags.any((tag) => _selectedTags.contains(tag));
@@ -190,10 +199,11 @@ class _NoteHomePageState extends State<NoteHomePage> with TickerProviderStateMix
     final totalNotes = _notes.length;
     final favoriteNotes = _notes.where((n) => n.isFavorite).length;
     final allTags = _allTags.length;
+    final now = DateTime.now();
     final todayNotes = _notes.where((n) => 
-      n.createdAt.year == DateTime.now().year &&
-      n.createdAt.month == DateTime.now().month &&
-      n.createdAt.day == DateTime.now().day
+      n.createdAt.year == now.year &&
+      n.createdAt.month == now.month &&
+      n.createdAt.day == now.day
     ).length;
     return {
       'total': totalNotes,
@@ -275,32 +285,36 @@ class _NoteHomePageState extends State<NoteHomePage> with TickerProviderStateMix
     });
     _saveNotes();
     
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Row(
-          children: [
-            const Icon(Icons.delete_outline, color: Colors.white),
-            const SizedBox(width: 8),
-            const Text('笔记已删除'),
-          ],
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Row(
+            children: [
+              const Icon(Icons.delete_outline, color: Colors.white),
+              const SizedBox(width: 8),
+              const Text('笔记已删除'),
+            ],
+          ),
+          action: SnackBarAction(
+            label: '撤销',
+            textColor: Colors.white,
+            onPressed: () {
+              if (mounted) {
+                setState(() {
+                  _notes.insert(index.clamp(0, _notes.length), deletedNote);
+                  _applyFilters();
+                });
+                _saveNotes();
+              }
+            },
+          ),
+          duration: const Duration(seconds: 3),
+          behavior: SnackBarBehavior.floating,
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+          backgroundColor: Colors.grey[800],
         ),
-        action: SnackBarAction(
-          label: '撤销',
-          textColor: Colors.white,
-          onPressed: () {
-            setState(() {
-              _notes.insert(index.clamp(0, _notes.length), deletedNote);
-              _applyFilters();
-            });
-            _saveNotes();
-          },
-        ),
-        duration: const Duration(seconds: 3),
-        behavior: SnackBarBehavior.floating,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-        backgroundColor: Colors.grey[800],
-      ),
-    );
+      );
+    }
   }
 
   void _toggleFavorite(Note note) {
@@ -320,6 +334,7 @@ class _NoteHomePageState extends State<NoteHomePage> with TickerProviderStateMix
   }
 
   void _showSnackBar(String message, IconData icon, Color color) {
+    if (!mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         content: Row(
@@ -342,7 +357,6 @@ class _NoteHomePageState extends State<NoteHomePage> with TickerProviderStateMix
     final stats = _stats;
 
     return Scaffold(
-      backgroundColor: isDark ? const Color(0xFF121212) : const Color(0xFFF8F9FA),
       body: _isLoading
           ? Center(
               child: Column(
@@ -413,51 +427,37 @@ class _NoteHomePageState extends State<NoteHomePage> with TickerProviderStateMix
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
-                      Row(
-                        children: [
-                          Container(
-                            padding: const EdgeInsets.all(10),
-                            decoration: BoxDecoration(
-                              gradient: const LinearGradient(
-                                colors: [Color(0xFF6366F1), Color(0xFF8B5CF6)],
-                              ),
-                              borderRadius: BorderRadius.circular(12),
-                            ),
-                            child: const Icon(Icons.edit_note, color: Colors.white, size: 24),
+                      Container(
+                        padding: const EdgeInsets.all(10),
+                        decoration: BoxDecoration(
+                          gradient: const LinearGradient(
+                            colors: [Color(0xFF6366F1), Color(0xFF8B5CF6)],
                           ),
-                          const SizedBox(width: 12),
-                          Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              const Text(
-                                'yeah',
-                                style: TextStyle(
-                                  fontSize: 28,
-                                  fontWeight: FontWeight.bold,
-                                  color: Color(0xFF1A1A1A),
-                                ),
-                              ),
-                              Text(
-                                _getGreeting(),
-                                style: TextStyle(
-                                  fontSize: 14,
-                                  color: Colors.grey[600],
-                                ),
-                              ),
-                            ],
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                        child: const Icon(Icons.edit_note, color: Colors.white, size: 24),
+                      ),
+                      const SizedBox(width: 12),
+                      Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          const Text(
+                            'yeah',
+                            style: TextStyle(
+                              fontSize: 28,
+                              fontWeight: FontWeight.bold,
+                              color: Color(0xFF6366F1),
+                            ),
+                          ),
+                          Text(
+                            _getGreeting(),
+                            style: TextStyle(
+                              fontSize: 14,
+                              color: isDark ? Colors.white70 : Colors.grey[600],
+                            ),
                           ),
                         ],
-                      ),
-                      IconButton(
-                        icon: Icon(
-                          isDark ? Icons.light_mode : Icons.dark_mode,
-                          color: isDark ? Colors.white : Colors.grey[700],
-                        ),
-                        onPressed: () {
-                          setState(() => _isDarkMode = !_isDarkMode);
-                        },
                       ),
                     ],
                   ),
@@ -551,19 +551,14 @@ class _NoteHomePageState extends State<NoteHomePage> with TickerProviderStateMix
             },
             decoration: InputDecoration(
               hintText: '🔍 搜索笔记、标签...',
-              hintStyle: TextStyle(color: Colors.grey[500]),
-              prefixIcon: AnimatedBuilder(
-                animation: _refreshAnimationController,
-                builder: (context, child) {
-                  return Icon(
-                    _searchQuery.isEmpty ? Icons.search : Icons.search,
-                    color: const Color(0xFF6366F1),
-                  );
-                },
+              hintStyle: TextStyle(color: isDark ? Colors.white54 : Colors.grey[400]),
+              prefixIcon: Icon(
+                Icons.search,
+                color: const Color(0xFF6366F1),
               ),
               suffixIcon: _searchQuery.isNotEmpty
                   ? IconButton(
-                      icon: const Icon(Icons.clear, color: Colors.grey),
+                      icon: Icon(Icons.clear, color: isDark ? Colors.white54 : Colors.grey),
                       onPressed: () {
                         _searchController.clear();
                         setState(() {
@@ -576,6 +571,7 @@ class _NoteHomePageState extends State<NoteHomePage> with TickerProviderStateMix
               border: InputBorder.none,
               contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
             ),
+            style: TextStyle(color: isDark ? Colors.white : Colors.black87),
           ),
         ),
       ),
@@ -607,13 +603,13 @@ class _NoteHomePageState extends State<NoteHomePage> with TickerProviderStateMix
               value: '${stats['today']}',
               label: '今日',
             ),
-            Container(width: 1, height: 40, color: Colors.grey[300]),
+            Container(width: 1, height: 40, color: isDark ? Colors.white24 : Colors.grey[300]),
             _QuickStat(
               emoji: '📊',
               value: '${stats['total']}',
               label: '总计',
             ),
-            Container(width: 1, height: 40, color: Colors.grey[300]),
+            Container(width: 1, height: 40, color: isDark ? Colors.white24 : Colors.grey[300]),
             _QuickStat(
               emoji: '🔥',
               value: '${stats['favorite']}',
@@ -642,7 +638,7 @@ class _NoteHomePageState extends State<NoteHomePage> with TickerProviderStateMix
                 style: TextStyle(
                   fontSize: 14,
                   fontWeight: FontWeight.w600,
-                  color: isDark ? Colors.white70 : Colors.grey[700],
+                  color: isDark ? Colors.white70 : Colors.grey[600],
                 ),
               ),
             ),
@@ -888,7 +884,6 @@ class _NoteHomePageState extends State<NoteHomePage> with TickerProviderStateMix
     _searchController.dispose();
     _fabAnimationController.dispose();
     _refreshAnimationController.dispose();
-    _searchAnimationController.dispose();
     super.dispose();
   }
 }
@@ -908,6 +903,7 @@ class _StatCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     return Expanded(
       child: Container(
         padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 8),
@@ -931,7 +927,7 @@ class _StatCard extends StatelessWidget {
               label,
               style: TextStyle(
                 fontSize: 11,
-                color: Colors.grey[600],
+                color: isDark ? Colors.white54 : Colors.grey[600],
               ),
             ),
           ],
@@ -970,7 +966,7 @@ class _QuickStat extends StatelessWidget {
           label,
           style: TextStyle(
             fontSize: 12,
-            color: Colors.grey[600],
+            color: Theme.of(context).brightness == Brightness.dark ? Colors.white54 : Colors.grey[600],
           ),
         ),
       ],
@@ -1437,8 +1433,7 @@ class _NoteEditorPageState extends State<NoteEditorPage> with SingleTickerProvid
   final TextEditingController _contentController = TextEditingController();
   final TextEditingController _tagController = TextEditingController();
   int _selectedColor = 0xFFFFF5E6;
-  List<String> _tags = [];
-  bool _isEditing = false;
+  final List<String> _tags = [];
   String _selectedMood = '';
   
   final List<int> _colors = [
@@ -1476,9 +1471,8 @@ class _NoteEditorPageState extends State<NoteEditorPage> with SingleTickerProvid
       _titleController.text = widget.note!.title;
       _contentController.text = widget.note!.content;
       _selectedColor = widget.note!.color;
-      _tags = List.from(widget.note!.tags);
+      _tags.addAll(widget.note!.tags);
       _selectedMood = widget.note!.mood;
-      _isEditing = true;
     }
     _colorAnimationController.forward();
   }
@@ -1510,27 +1504,33 @@ class _NoteEditorPageState extends State<NoteEditorPage> with SingleTickerProvid
     final tag = _tagController.text.trim();
     if (tag.isEmpty) return;
     if (_tags.contains(tag)) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('标签 "$tag" 已存在'), duration: const Duration(seconds: 1)),
-      );
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('标签 "$tag" 已存在'), duration: const Duration(seconds: 1)),
+        );
+      }
       return;
     }
     setState(() {
       _tags.add(tag);
       _tagController.clear();
     });
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text('已添加标签: $tag'), duration: const Duration(seconds: 1)),
-    );
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('已添加标签: $tag'), duration: const Duration(seconds: 1)),
+      );
+    }
   }
 
   void _removeTag(String tag) {
     setState(() {
       _tags.remove(tag);
     });
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text('已删除标签: $tag'), duration: const Duration(seconds: 1)),
-    );
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('已删除标签: $tag'), duration: const Duration(seconds: 1)),
+      );
+    }
   }
 
   @override
@@ -1550,7 +1550,7 @@ class _NoteEditorPageState extends State<NoteEditorPage> with SingleTickerProvid
           TextButton.icon(
             onPressed: _saveNote,
             icon: Icon(Icons.check, color: isDark ? Colors.white70 : const Color(0xFF6366F1)),
-            label: Text(_isEditing ? '更新' : '保存', style: TextStyle(color: isDark ? Colors.white70 : const Color(0xFF6366F1))),
+            label: Text(widget.note != null ? '更新' : '保存', style: TextStyle(color: isDark ? Colors.white70 : const Color(0xFF6366F1))),
           ),
         ],
       ),
@@ -1580,7 +1580,7 @@ class _NoteEditorPageState extends State<NoteEditorPage> with SingleTickerProvid
                         fontWeight: FontWeight.bold,
                         color: Color(0xFF1A1A1A),
                       ),
-                      autofocus: !_isEditing,
+                      autofocus: widget.note == null,
                     ),
                     const SizedBox(height: 16),
                     TextField(
@@ -1843,14 +1843,14 @@ class Note {
       };
 
   factory Note.fromJson(Map<String, dynamic> json) => Note(
-        id: json['id'],
-        title: json['title'],
-        content: json['content'],
-        color: json['color'],
-        tags: List<String>.from(json['tags'] ?? []),
-        createdAt: DateTime.parse(json['createdAt']),
-        isFavorite: json['isFavorite'] ?? false,
-        mood: json['mood'] ?? '',
+        id: json['id'] as String? ?? DateTime.now().millisecondsSinceEpoch.toString(),
+        title: json['title'] as String? ?? '',
+        content: json['content'] as String? ?? '',
+        color: json['color'] as int? ?? 0xFFFFF5E6,
+        tags: (json['tags'] as List<dynamic>?)?.map((e) => e as String).toList() ?? [],
+        createdAt: json['createdAt'] != null ? DateTime.tryParse(json['createdAt']) ?? DateTime.now() : DateTime.now(),
+        isFavorite: json['isFavorite'] as bool? ?? false,
+        mood: json['mood'] as String? ?? '',
       );
 }
 
