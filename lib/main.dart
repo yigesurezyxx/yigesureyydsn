@@ -428,7 +428,7 @@ class _NoteHomePageState extends State<NoteHomePage> with TickerProviderStateMix
   }
 
   Widget _buildTagFilter() {
-    final tags = _allTags;
+    final tags = _allTags.toList();
     if (tags.isEmpty) return const SliverToBoxAdapter(child: SizedBox.shrink());
 
     return SliverToBoxAdapter(
@@ -455,7 +455,7 @@ class _NoteHomePageState extends State<NoteHomePage> with TickerProviderStateMix
                 ),
               );
             }
-            final tag = tags.elementAt(index - 1);
+            final tag = tags[index - 1];
             return Padding(
               padding: const EdgeInsets.only(right: 8),
               child: FilterChip(
@@ -1149,15 +1149,18 @@ class _NoteEditorPageState extends State<NoteEditorPage> with SingleTickerProvid
   }
 
   void _saveNote() {
-    if (_titleController.text.trim().isEmpty && _contentController.text.trim().isEmpty) {
+    final title = _titleController.text.trim();
+    final content = _contentController.text.trim();
+    
+    if (title.isEmpty && content.isEmpty) {
       Navigator.pop(context);
       return;
     }
 
     final note = Note(
       id: widget.note?.id ?? DateTime.now().millisecondsSinceEpoch.toString(),
-      title: _titleController.text.trim(),
-      content: _contentController.text.trim(),
+      title: title.isEmpty ? '无标题笔记' : title,
+      content: content,
       color: _selectedColor,
       tags: _tags,
       createdAt: widget.note?.createdAt ?? DateTime.now(),
