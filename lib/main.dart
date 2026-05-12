@@ -32,6 +32,10 @@ class YeahApp extends StatelessWidget {
         ),
         fontFamily: 'Roboto',
         scaffoldBackgroundColor: const Color(0xFFF8F9FA),
+        appBarTheme: const AppBarTheme(
+          centerTitle: true,
+          elevation: 0,
+        ),
       ),
       darkTheme: ThemeData(
         useMaterial3: true,
@@ -42,6 +46,10 @@ class YeahApp extends StatelessWidget {
         ),
         fontFamily: 'Roboto',
         scaffoldBackgroundColor: const Color(0xFF121212),
+        appBarTheme: const AppBarTheme(
+          centerTitle: true,
+          elevation: 0,
+        ),
       ),
       themeMode: ThemeMode.system,
       home: const NoteHomePage(),
@@ -84,11 +92,6 @@ class _NoteHomePageState extends State<NoteHomePage> with TickerProviderStateMix
     _refreshAnimationController.repeat();
   }
 
-  @override
-  void didChangeDependencies() {
-    super.didChangeDependencies();
-  }
-
   Future<void> _loadNotes() async {
     try {
       final prefs = await SharedPreferences.getInstance();
@@ -123,7 +126,7 @@ class _NoteHomePageState extends State<NoteHomePage> with TickerProviderStateMix
         mood: '✨',
       ),
       Note(
-        id: (DateTime.now().millisecondsSinceEpoch - 1000).toString(),
+        id: (DateTime.now().millisecondsSinceEpoch - 1000000).toString(),
         title: '💡 产品思考',
         content: '用户需要的是简单易用的产品，而不是功能复杂的技术展示。',
         color: 0xFFE6F7FF,
@@ -132,7 +135,7 @@ class _NoteHomePageState extends State<NoteHomePage> with TickerProviderStateMix
         mood: '💡',
       ),
       Note(
-        id: (DateTime.now().millisecondsSinceEpoch - 2000).toString(),
+        id: (DateTime.now().millisecondsSinceEpoch - 2000000).toString(),
         title: '📋 本周任务',
         content: '1. 完成核心功能开发\n2. 优化用户体验\n3. 收集用户反馈',
         color: 0xFFF6FFED,
@@ -289,9 +292,10 @@ class _NoteHomePageState extends State<NoteHomePage> with TickerProviderStateMix
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Row(
+            mainAxisAlignment: MainAxisAlignment.start,
             children: [
-              const Icon(Icons.delete_outline, color: Colors.white),
-              const SizedBox(width: 8),
+              const Icon(Icons.delete_outline, color: Colors.white, size: 20),
+              const SizedBox(width: 12),
               const Text('笔记已删除'),
             ],
           ),
@@ -312,6 +316,7 @@ class _NoteHomePageState extends State<NoteHomePage> with TickerProviderStateMix
           behavior: SnackBarBehavior.floating,
           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
           backgroundColor: Colors.grey[800],
+          margin: const EdgeInsets.all(16),
         ),
       );
     }
@@ -338,15 +343,17 @@ class _NoteHomePageState extends State<NoteHomePage> with TickerProviderStateMix
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         content: Row(
+          mainAxisAlignment: MainAxisAlignment.start,
           children: [
             Icon(icon, color: color, size: 20),
-            const SizedBox(width: 8),
+            const SizedBox(width: 12),
             Text(message),
           ],
         ),
         behavior: SnackBarBehavior.floating,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
         duration: const Duration(seconds: 2),
+        margin: const EdgeInsets.all(16),
       ),
     );
   }
@@ -358,36 +365,7 @@ class _NoteHomePageState extends State<NoteHomePage> with TickerProviderStateMix
 
     return Scaffold(
       body: _isLoading
-          ? Center(
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  TweenAnimationBuilder<double>(
-                    tween: Tween(begin: 0.0, end: 1.0),
-                    duration: const Duration(seconds: 1),
-                    builder: (context, value, child) {
-                      return Opacity(
-                        opacity: value,
-                        child: const Icon(
-                          Icons.edit_note,
-                          size: 64,
-                          color: Color(0xFF6366F1),
-                        ),
-                      );
-                    },
-                  ),
-                  const SizedBox(height: 16),
-                  Text(
-                    'yeah',
-                    style: TextStyle(
-                      fontSize: 24,
-                      fontWeight: FontWeight.bold,
-                      color: isDark ? Colors.white : const Color(0xFF1A1A1A),
-                    ),
-                  ),
-                ],
-              ),
-            )
+          ? _buildLoadingScreen(isDark)
           : CustomScrollView(
               slivers: [
                 _buildHeader(isDark, stats),
@@ -401,14 +379,57 @@ class _NoteHomePageState extends State<NoteHomePage> with TickerProviderStateMix
     );
   }
 
+  Widget _buildLoadingScreen(bool isDark) {
+    return Center(
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          TweenAnimationBuilder<double>(
+            tween: Tween(begin: 0.0, end: 1.0),
+            duration: const Duration(seconds: 1),
+            builder: (context, value, child) {
+              return Opacity(
+                opacity: value,
+                child: Container(
+                  padding: const EdgeInsets.all(20),
+                  decoration: BoxDecoration(
+                    gradient: const LinearGradient(
+                      colors: [Color(0xFF6366F1), Color(0xFF8B5CF6)],
+                    ),
+                    borderRadius: BorderRadius.circular(20),
+                  ),
+                  child: const Icon(
+                    Icons.edit_note,
+                    size: 64,
+                    color: Colors.white,
+                  ),
+                ),
+              );
+            },
+          ),
+          const SizedBox(height: 24),
+          Text(
+            'yeah',
+            style: TextStyle(
+              fontSize: 28,
+              fontWeight: FontWeight.bold,
+              color: isDark ? Colors.white : const Color(0xFF1A1A1A),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
   Widget _buildHeader(bool isDark, Map<String, dynamic> stats) {
     return SliverAppBar(
-      expandedHeight: 180,
+      expandedHeight: 200,
       floating: false,
       pinned: true,
       backgroundColor: isDark ? const Color(0xFF1E1E1E) : Colors.white,
       surfaceTintColor: Colors.transparent,
       elevation: 0,
+      title: const Text('yeah', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 24)),
       flexibleSpace: FlexibleSpaceBar(
         background: Container(
           decoration: BoxDecoration(
@@ -422,67 +443,42 @@ class _NoteHomePageState extends State<NoteHomePage> with TickerProviderStateMix
           ),
           child: SafeArea(
             child: Padding(
-              padding: const EdgeInsets.fromLTRB(20, 10, 20, 0),
+              padding: const EdgeInsets.fromLTRB(20, 60, 20, 0),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Row(
-                    children: [
-                      Container(
-                        padding: const EdgeInsets.all(10),
-                        decoration: BoxDecoration(
-                          gradient: const LinearGradient(
-                            colors: [Color(0xFF6366F1), Color(0xFF8B5CF6)],
-                          ),
-                          borderRadius: BorderRadius.circular(12),
-                        ),
-                        child: const Icon(Icons.edit_note, color: Colors.white, size: 24),
-                      ),
-                      const SizedBox(width: 12),
-                      Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          const Text(
-                            'yeah',
-                            style: TextStyle(
-                              fontSize: 28,
-                              fontWeight: FontWeight.bold,
-                              color: Color(0xFF6366F1),
-                            ),
-                          ),
-                          Text(
-                            _getGreeting(),
-                            style: TextStyle(
-                              fontSize: 14,
-                              color: isDark ? Colors.white70 : Colors.grey[600],
-                            ),
-                          ),
-                        ],
-                      ),
-                    ],
+                  Text(
+                    _getGreeting(),
+                    style: TextStyle(
+                      fontSize: 16,
+                      color: isDark ? Colors.white70 : Colors.grey[600],
+                      fontWeight: FontWeight.w500,
+                    ),
                   ),
                   const SizedBox(height: 20),
                   Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceEvenly,
                     children: [
                       _StatCard(
                         icon: Icons.note_outlined,
                         value: '${stats['total']}',
                         label: '笔记',
                         color: const Color(0xFF6366F1),
+                        isDark: isDark,
                       ),
-                      const SizedBox(width: 12),
                       _StatCard(
                         icon: Icons.star_outline,
                         value: '${stats['favorite']}',
                         label: '收藏',
                         color: Colors.amber,
+                        isDark: isDark,
                       ),
-                      const SizedBox(width: 12),
                       _StatCard(
                         icon: Icons.label_outline,
                         value: '${stats['tags']}',
                         label: '标签',
                         color: const Color(0xFF10B981),
+                        isDark: isDark,
                       ),
                     ],
                   ),
@@ -520,6 +516,7 @@ class _NoteHomePageState extends State<NoteHomePage> with TickerProviderStateMix
             const PopupMenuItem(value: ViewMode.compact, child: Text('⚡ 紧凑视图')),
           ],
         ),
+        const SizedBox(width: 8),
       ],
     );
   }
@@ -552,9 +549,10 @@ class _NoteHomePageState extends State<NoteHomePage> with TickerProviderStateMix
             decoration: InputDecoration(
               hintText: '🔍 搜索笔记、标签...',
               hintStyle: TextStyle(color: isDark ? Colors.white54 : Colors.grey[400]),
-              prefixIcon: Icon(
+              prefixIcon: const Icon(
                 Icons.search,
-                color: const Color(0xFF6366F1),
+                color: Color(0xFF6366F1),
+                size: 24,
               ),
               suffixIcon: _searchQuery.isNotEmpty
                   ? IconButton(
@@ -569,9 +567,9 @@ class _NoteHomePageState extends State<NoteHomePage> with TickerProviderStateMix
                     )
                   : null,
               border: InputBorder.none,
-              contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+              contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
             ),
-            style: TextStyle(color: isDark ? Colors.white : Colors.black87),
+            style: TextStyle(color: isDark ? Colors.white : Colors.black87, fontSize: 16),
           ),
         ),
       ),
@@ -596,24 +594,27 @@ class _NoteHomePageState extends State<NoteHomePage> with TickerProviderStateMix
           ),
         ),
         child: Row(
-          mainAxisAlignment: MainAxisAlignment.spaceAround,
+          mainAxisAlignment: MainAxisAlignment.spaceEvenly,
           children: [
             _QuickStat(
               emoji: '📝',
               value: '${stats['today']}',
               label: '今日',
+              isDark: isDark,
             ),
             Container(width: 1, height: 40, color: isDark ? Colors.white24 : Colors.grey[300]),
             _QuickStat(
               emoji: '📊',
               value: '${stats['total']}',
-              label: '总计',
+              label: '总数',
+              isDark: isDark,
             ),
             Container(width: 1, height: 40, color: isDark ? Colors.white24 : Colors.grey[300]),
             _QuickStat(
               emoji: '🔥',
               value: '${stats['favorite']}',
               label: '收藏',
+              isDark: isDark,
             ),
           ],
         ),
@@ -660,7 +661,10 @@ class _NoteHomePageState extends State<NoteHomePage> with TickerProviderStateMix
                         checkmarkColor: Colors.white,
                         labelStyle: TextStyle(
                           color: _selectedTags.isEmpty ? Colors.white : (isDark ? Colors.white70 : Colors.grey[700]),
+                          fontSize: 14,
+                          fontWeight: FontWeight.w500,
                         ),
+                        padding: const EdgeInsets.symmetric(horizontal: 16),
                         onSelected: (selected) {
                           setState(() {
                             _selectedTags.clear();
@@ -680,7 +684,10 @@ class _NoteHomePageState extends State<NoteHomePage> with TickerProviderStateMix
                       checkmarkColor: Colors.white,
                       labelStyle: TextStyle(
                         color: _selectedTags.contains(tag) ? Colors.white : (isDark ? Colors.white70 : Colors.grey[700]),
+                        fontSize: 14,
+                        fontWeight: FontWeight.w500,
                       ),
+                      padding: const EdgeInsets.symmetric(horizontal: 16),
                       onSelected: (selected) {
                         setState(() {
                           if (selected) {
@@ -718,17 +725,18 @@ class _NoteHomePageState extends State<NoteHomePage> with TickerProviderStateMix
                     scale: value,
                     child: Icon(
                       Icons.lightbulb_outline,
-                      size: 64,
+                      size: 80,
                       color: const Color(0xFF6366F1).withOpacity(0.3),
                     ),
                   );
                 },
               ),
-              const SizedBox(height: 16),
+              const SizedBox(height: 24),
               Text(
                 _searchQuery.isNotEmpty ? '没有找到相关笔记' : '还没有笔记',
                 style: TextStyle(
                   fontSize: 18,
+                  fontWeight: FontWeight.w600,
                   color: isDark ? Colors.white70 : Colors.grey[600],
                 ),
               ),
@@ -863,20 +871,24 @@ class _NoteHomePageState extends State<NoteHomePage> with TickerProviderStateMix
           child: child,
         );
       },
-      child: FloatingActionButton(
+      child: FloatingActionButton.extended(
         onPressed: _addNote,
-        elevation: 8,
+        elevation: 6,
         backgroundColor: const Color(0xFF6366F1),
-        child: const Icon(Icons.add, color: Colors.white, size: 28),
+        icon: const Icon(Icons.add, color: Colors.white, size: 24),
+        label: const Text('新建', style: TextStyle(fontWeight: FontWeight.w600, color: Colors.white)),
       ),
     );
   }
 
   String _getGreeting() {
     final hour = DateTime.now().hour;
-    if (hour < 12) return '早上好 ☀️';
-    if (hour < 18) return '下午好 🌤️';
-    return '晚上好 🌙';
+    if (hour < 6) return '夜深了，早点休息 🌙';
+    if (hour < 12) return '早上好，新的一天 ☀️';
+    if (hour < 14) return '中午好，休息一下 ☀️';
+    if (hour < 18) return '下午好，工作顺利 🌤️';
+    if (hour < 22) return '晚上好，放松一下 🌙';
+    return '夜深了，早点休息 🌙';
   }
 
   @override
@@ -893,41 +905,46 @@ class _StatCard extends StatelessWidget {
   final String value;
   final String label;
   final Color color;
+  final bool isDark;
 
   const _StatCard({
     required this.icon,
     required this.value,
     required this.label,
     required this.color,
+    required this.isDark,
   });
 
   @override
   Widget build(BuildContext context) {
-    final isDark = Theme.of(context).brightness == Brightness.dark;
     return Expanded(
       child: Container(
+        margin: const EdgeInsets.symmetric(horizontal: 4),
         padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 8),
         decoration: BoxDecoration(
           color: color.withOpacity(0.1),
           borderRadius: BorderRadius.circular(12),
         ),
         child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
           children: [
             Icon(icon, color: color, size: 20),
-            const SizedBox(height: 4),
+            const SizedBox(height: 6),
             Text(
               value,
               style: TextStyle(
-                fontSize: 18,
+                fontSize: 20,
                 fontWeight: FontWeight.bold,
                 color: color,
               ),
             ),
+            const SizedBox(height: 2),
             Text(
               label,
               style: TextStyle(
-                fontSize: 11,
+                fontSize: 12,
                 color: isDark ? Colors.white54 : Colors.grey[600],
+                fontWeight: FontWeight.w500,
               ),
             ),
           ],
@@ -941,35 +958,42 @@ class _QuickStat extends StatelessWidget {
   final String emoji;
   final String value;
   final String label;
+  final bool isDark;
 
   const _QuickStat({
     required this.emoji,
     required this.value,
     required this.label,
+    required this.isDark,
   });
 
   @override
   Widget build(BuildContext context) {
-    return Column(
-      children: [
-        Text(emoji, style: const TextStyle(fontSize: 24)),
-        const SizedBox(height: 4),
-        Text(
-          value,
-          style: const TextStyle(
-            fontSize: 20,
-            fontWeight: FontWeight.bold,
-            color: Color(0xFF6366F1),
+    return Expanded(
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Text(emoji, style: const TextStyle(fontSize: 28)),
+          const SizedBox(height: 6),
+          Text(
+            value,
+            style: const TextStyle(
+              fontSize: 22,
+              fontWeight: FontWeight.bold,
+              color: Color(0xFF6366F1),
+            ),
           ),
-        ),
-        Text(
-          label,
-          style: TextStyle(
-            fontSize: 12,
-            color: Theme.of(context).brightness == Brightness.dark ? Colors.white54 : Colors.grey[600],
+          const SizedBox(height: 2),
+          Text(
+            label,
+            style: TextStyle(
+              fontSize: 12,
+              fontWeight: FontWeight.w500,
+              color: isDark ? Colors.white54 : Colors.grey[600],
+            ),
           ),
-        ),
-      ],
+        ],
+      ),
     );
   }
 }
@@ -1006,7 +1030,7 @@ class _NoteCardState extends State<_NoteCard> with SingleTickerProviderStateMixi
       vsync: this,
       duration: const Duration(milliseconds: 150),
     );
-    _scaleAnimation = Tween<double>(begin: 1.0, end: 0.95).animate(
+    _scaleAnimation = Tween<double>(begin: 1.0, end: 0.96).animate(
       CurvedAnimation(parent: _controller, curve: Curves.easeInOut),
     );
   }
@@ -1059,6 +1083,20 @@ class _NoteCardState extends State<_NoteCard> with SingleTickerProviderStateMixi
         },
         child: Stack(
           children: [
+            Positioned.fill(
+              child: AnimatedContainer(
+                duration: const Duration(milliseconds: 100),
+                decoration: BoxDecoration(
+                  color: _dragOffset > 0 ? Colors.amber : Colors.red,
+                  borderRadius: BorderRadius.circular(16),
+                ),
+                child: Icon(
+                  _dragOffset > 0 ? Icons.star : Icons.delete,
+                  color: Colors.white,
+                  size: 32,
+                ),
+              ),
+            ),
             AnimatedContainer(
               duration: const Duration(milliseconds: 100),
               transform: Matrix4.translationValues(_dragOffset, 0, 0),
@@ -1080,15 +1118,15 @@ class _NoteCardState extends State<_NoteCard> with SingleTickerProviderStateMixi
                 children: [
                   if (widget.note.mood.isNotEmpty)
                     Padding(
-                      padding: const EdgeInsets.all(12),
+                      padding: const EdgeInsets.fromLTRB(12, 12, 12, 0),
                       child: Text(
                         widget.note.mood,
-                        style: const TextStyle(fontSize: 24),
+                        style: const TextStyle(fontSize: 28),
                       ),
                     ),
                   Expanded(
                     child: Padding(
-                      padding: const EdgeInsets.fromLTRB(12, 0, 12, 12),
+                      padding: const EdgeInsets.all(12),
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
@@ -1103,7 +1141,7 @@ class _NoteCardState extends State<_NoteCard> with SingleTickerProviderStateMixi
                                 child: Text(
                                   widget.note.title,
                                   style: const TextStyle(
-                                    fontSize: 16,
+                                    fontSize: 15,
                                     fontWeight: FontWeight.w600,
                                     color: Color(0xFF1A1A1A),
                                   ),
@@ -1113,7 +1151,7 @@ class _NoteCardState extends State<_NoteCard> with SingleTickerProviderStateMixi
                               ),
                             ],
                           ),
-                          const SizedBox(height: 6),
+                          const SizedBox(height: 8),
                           Expanded(
                             child: Text(
                               widget.note.content,
@@ -1122,58 +1160,37 @@ class _NoteCardState extends State<_NoteCard> with SingleTickerProviderStateMixi
                                 color: Colors.grey[700],
                                 height: 1.4,
                               ),
-                              maxLines: 4,
+                              maxLines: 3,
                               overflow: TextOverflow.ellipsis,
                             ),
                           ),
-                          const SizedBox(height: 8),
-                          Wrap(
-                            spacing: 4,
-                            runSpacing: 4,
-                            children: widget.note.tags.take(2).map((tag) => Container(
-                              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                              decoration: BoxDecoration(
-                                color: Colors.black.withOpacity(0.08),
-                                borderRadius: BorderRadius.circular(4),
-                              ),
-                              child: Text(
-                                '#$tag',
-                                style: TextStyle(
-                                  fontSize: 10,
-                                  color: Colors.grey[600],
+                          if (widget.note.tags.isNotEmpty) ...[
+                            const SizedBox(height: 8),
+                            Wrap(
+                              spacing: 4,
+                              runSpacing: 4,
+                              children: widget.note.tags.take(2).map((tag) => Container(
+                                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
+                                decoration: BoxDecoration(
+                                  color: Colors.black.withOpacity(0.08),
+                                  borderRadius: BorderRadius.circular(6),
                                 ),
-                              ),
-                            )).toList(),
-                          ),
+                                child: Text(
+                                  '#$tag',
+                                  style: TextStyle(
+                                    fontSize: 11,
+                                    color: Colors.grey[600],
+                                    fontWeight: FontWeight.w500,
+                                  ),
+                                ),
+                              )).toList(),
+                            ),
+                          ],
                         ],
                       ),
                     ),
                   ),
                 ],
-              ),
-            ),
-            Positioned(
-              left: _dragOffset < 0 ? null : 0,
-              right: _dragOffset > 0 ? null : 0,
-              top: 0,
-              bottom: 0,
-              child: AnimatedOpacity(
-                duration: const Duration(milliseconds: 100),
-                opacity: _dragOffset.abs() / 80,
-                child: Container(
-                  width: 80,
-                  decoration: BoxDecoration(
-                    color: _dragOffset > 0 ? Colors.amber : Colors.red,
-                    borderRadius: BorderRadius.horizontal(
-                      left: Radius.circular(_dragOffset > 0 ? 0 : 16),
-                      right: Radius.circular(_dragOffset < 0 ? 0 : 16),
-                    ),
-                  ),
-                  child: Icon(
-                    _dragOffset > 0 ? Icons.star : Icons.delete,
-                    color: Colors.white,
-                  ),
-                ),
               ),
             ),
           ],
@@ -1214,31 +1231,31 @@ class _NoteListItem extends StatelessWidget {
       background: Container(
         decoration: BoxDecoration(
           color: Colors.amber,
-          borderRadius: BorderRadius.circular(12),
+          borderRadius: BorderRadius.circular(16),
         ),
         alignment: Alignment.centerLeft,
-        padding: const EdgeInsets.only(left: 20),
-        child: const Icon(Icons.star, color: Colors.white),
+        padding: const EdgeInsets.only(left: 24),
+        child: const Icon(Icons.star, color: Colors.white, size: 28),
       ),
       secondaryBackground: Container(
         decoration: BoxDecoration(
           color: Colors.red,
-          borderRadius: BorderRadius.circular(12),
+          borderRadius: BorderRadius.circular(16),
         ),
         alignment: Alignment.centerRight,
-        padding: const EdgeInsets.only(right: 20),
-        child: const Icon(Icons.delete, color: Colors.white),
+        padding: const EdgeInsets.only(right: 24),
+        child: const Icon(Icons.delete, color: Colors.white, size: 28),
       ),
       child: Material(
         color: Colors.transparent,
         child: InkWell(
           onTap: onTap,
-          borderRadius: BorderRadius.circular(12),
+          borderRadius: BorderRadius.circular(16),
           child: Container(
             padding: const EdgeInsets.all(16),
             decoration: BoxDecoration(
               color: Color(note.color),
-              borderRadius: BorderRadius.circular(12),
+              borderRadius: BorderRadius.circular(16),
               boxShadow: [
                 BoxShadow(
                   color: Colors.black.withOpacity(0.05),
@@ -1248,15 +1265,16 @@ class _NoteListItem extends StatelessWidget {
               ],
             ),
             child: Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 if (note.mood.isNotEmpty)
                   Padding(
                     padding: const EdgeInsets.only(right: 12),
-                    child: Text(note.mood, style: const TextStyle(fontSize: 24)),
+                    child: Text(note.mood, style: const TextStyle(fontSize: 28)),
                   ),
                 Container(
                   width: 4,
-                  height: 50,
+                  height: 60,
                   decoration: BoxDecoration(
                     color: const Color(0xFF6366F1),
                     borderRadius: BorderRadius.circular(2),
@@ -1287,20 +1305,40 @@ class _NoteListItem extends StatelessWidget {
                           ),
                         ],
                       ),
-                      const SizedBox(height: 4),
+                      const SizedBox(height: 6),
                       Text(
                         note.content,
                         style: TextStyle(
                           fontSize: 13,
                           color: Colors.grey[600],
                         ),
-                        maxLines: 1,
+                        maxLines: 2,
                         overflow: TextOverflow.ellipsis,
                       ),
+                      const SizedBox(height: 8),
+                      if (note.tags.isNotEmpty)
+                        Wrap(
+                          spacing: 6,
+                          runSpacing: 4,
+                          children: note.tags.map((tag) => Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
+                            decoration: BoxDecoration(
+                              color: Colors.black.withOpacity(0.08),
+                              borderRadius: BorderRadius.circular(4),
+                            ),
+                            child: Text(
+                              '#$tag',
+                              style: TextStyle(
+                                fontSize: 11,
+                                color: Colors.grey[600],
+                              ),
+                            ),
+                          )).toList(),
+                        ),
                     ],
                   ),
                 ),
-                const SizedBox(width: 8),
+                const SizedBox(width: 12),
                 Text(
                   _formatTime(note.createdAt),
                   style: TextStyle(fontSize: 11, color: Colors.grey[500]),
@@ -1357,30 +1395,30 @@ class _NoteCompactItem extends StatelessWidget {
         color: Colors.amber,
         alignment: Alignment.centerLeft,
         padding: const EdgeInsets.only(left: 20),
-        child: const Icon(Icons.star, color: Colors.white),
+        child: const Icon(Icons.star, color: Colors.white, size: 24),
       ),
       secondaryBackground: Container(
         color: Colors.red,
         alignment: Alignment.centerRight,
         padding: const EdgeInsets.only(right: 20),
-        child: const Icon(Icons.delete, color: Colors.white),
+        child: const Icon(Icons.delete, color: Colors.white, size: 24),
       ),
       child: Material(
         color: Colors.transparent,
         child: InkWell(
           onTap: onTap,
           child: Container(
-            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
             decoration: BoxDecoration(
               color: Color(note.color),
-              borderRadius: BorderRadius.circular(8),
+              borderRadius: BorderRadius.circular(12),
             ),
             child: Row(
               children: [
                 if (note.mood.isNotEmpty)
                   Padding(
                     padding: const EdgeInsets.only(right: 8),
-                    child: Text(note.mood, style: const TextStyle(fontSize: 18)),
+                    child: Text(note.mood, style: const TextStyle(fontSize: 20)),
                   ),
                 if (note.isFavorite)
                   const Padding(
@@ -1390,7 +1428,7 @@ class _NoteCompactItem extends StatelessWidget {
                 Expanded(
                   child: Text(
                     note.title,
-                    style: const TextStyle(fontSize: 14),
+                    style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w500),
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
                   ),
@@ -1506,7 +1544,19 @@ class _NoteEditorPageState extends State<NoteEditorPage> with SingleTickerProvid
     if (_tags.contains(tag)) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('标签 "$tag" 已存在'), duration: const Duration(seconds: 1)),
+          SnackBar(
+            content: Row(
+              children: [
+                const Icon(Icons.info_outline, color: Colors.white, size: 20),
+                const SizedBox(width: 12),
+                Text('标签 "$tag" 已存在'),
+              ],
+            ),
+            duration: const Duration(seconds: 1),
+            behavior: SnackBarBehavior.floating,
+            margin: const EdgeInsets.all(16),
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+          ),
         );
       }
       return;
@@ -1517,7 +1567,19 @@ class _NoteEditorPageState extends State<NoteEditorPage> with SingleTickerProvid
     });
     if (mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('已添加标签: $tag'), duration: const Duration(seconds: 1)),
+        SnackBar(
+          content: Row(
+            children: [
+              const Icon(Icons.check_circle, color: Colors.green, size: 20),
+              const SizedBox(width: 12),
+              Text('已添加标签: $tag'),
+            ],
+          ),
+          duration: const Duration(seconds: 1),
+          behavior: SnackBarBehavior.floating,
+          margin: const EdgeInsets.all(16),
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+        ),
       );
     }
   }
@@ -1528,7 +1590,19 @@ class _NoteEditorPageState extends State<NoteEditorPage> with SingleTickerProvid
     });
     if (mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('已删除标签: $tag'), duration: const Duration(seconds: 1)),
+        SnackBar(
+          content: Row(
+            children: [
+              const Icon(Icons.delete_outline, color: Colors.red, size: 20),
+              const SizedBox(width: 12),
+              Text('已删除标签: $tag'),
+            ],
+          ),
+          duration: const Duration(seconds: 1),
+          behavior: SnackBarBehavior.floating,
+          margin: const EdgeInsets.all(16),
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+        ),
       );
     }
   }
@@ -1542,15 +1616,26 @@ class _NoteEditorPageState extends State<NoteEditorPage> with SingleTickerProvid
       appBar: AppBar(
         backgroundColor: Colors.transparent,
         elevation: 0,
-        leading: IconButton(
-          icon: Icon(Icons.close, color: isDark ? Colors.white70 : Colors.grey[700]),
-          onPressed: () => Navigator.pop(context),
+        leading: Padding(
+          padding: const EdgeInsets.only(left: 12),
+          child: IconButton(
+            icon: Icon(Icons.close, color: isDark ? Colors.white70 : Colors.grey[700], size: 28),
+            onPressed: () => Navigator.pop(context),
+          ),
         ),
         actions: [
-          TextButton.icon(
-            onPressed: _saveNote,
-            icon: Icon(Icons.check, color: isDark ? Colors.white70 : const Color(0xFF6366F1)),
-            label: Text(widget.note != null ? '更新' : '保存', style: TextStyle(color: isDark ? Colors.white70 : const Color(0xFF6366F1))),
+          Padding(
+            padding: const EdgeInsets.only(right: 12),
+            child: TextButton.icon(
+              onPressed: _saveNote,
+              style: TextButton.styleFrom(
+                padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+                backgroundColor: const Color(0xFF6366F1),
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+              ),
+              icon: const Icon(Icons.check, color: Colors.white, size: 22),
+              label: Text(widget.note != null ? '更新' : '保存', style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w600, fontSize: 16)),
+            ),
           ),
         ],
       ),
@@ -1582,7 +1667,7 @@ class _NoteEditorPageState extends State<NoteEditorPage> with SingleTickerProvid
                       ),
                       autofocus: widget.note == null,
                     ),
-                    const SizedBox(height: 16),
+                    const SizedBox(height: 8),
                     TextField(
                       controller: _contentController,
                       decoration: InputDecoration(
@@ -1599,19 +1684,19 @@ class _NoteEditorPageState extends State<NoteEditorPage> with SingleTickerProvid
                       minLines: 10,
                       keyboardType: TextInputType.multiline,
                     ),
-                    const SizedBox(height: 20),
+                    const SizedBox(height: 24),
                     Text(
                       '🎭 选择心情',
                       style: TextStyle(
-                        fontSize: 14,
+                        fontSize: 16,
                         fontWeight: FontWeight.w600,
                         color: Colors.grey[600],
                       ),
                     ),
-                    const SizedBox(height: 8),
+                    const SizedBox(height: 12),
                     Wrap(
-                      spacing: 8,
-                      runSpacing: 8,
+                      spacing: 10,
+                      runSpacing: 10,
                       children: _moods.map((mood) {
                         final isSelected = _selectedMood == mood['emoji'];
                         return GestureDetector(
@@ -1622,30 +1707,31 @@ class _NoteEditorPageState extends State<NoteEditorPage> with SingleTickerProvid
                           },
                           child: AnimatedContainer(
                             duration: const Duration(milliseconds: 200),
-                            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
                             decoration: BoxDecoration(
-                              color: isSelected ? const Color(0xFF6366F1) : Colors.white,
-                              borderRadius: BorderRadius.circular(20),
+                              color: isSelected ? const Color(0xFF6366F1) : (isDark ? const Color(0xFF2D2D2D) : Colors.white),
+                              borderRadius: BorderRadius.circular(16),
                               border: Border.all(
-                                color: isSelected ? const Color(0xFF6366F1) : Colors.grey[300]!,
+                                color: isSelected ? const Color(0xFF6366F1) : (isDark ? Colors.white24 : Colors.grey[300]!),
                               ),
                               boxShadow: isSelected
                                   ? [BoxShadow(
                                       color: const Color(0xFF6366F1).withOpacity(0.3),
-                                      blurRadius: 8,
+                                      blurRadius: 12,
                                     )]
                                   : null,
                             ),
                             child: Row(
                               mainAxisSize: MainAxisSize.min,
                               children: [
-                                Text(mood['emoji']!, style: const TextStyle(fontSize: 18)),
-                                const SizedBox(width: 4),
+                                Text(mood['emoji']!, style: const TextStyle(fontSize: 24)),
+                                const SizedBox(width: 8),
                                 Text(
                                   mood['label']!,
                                   style: TextStyle(
-                                    fontSize: 12,
-                                    color: isSelected ? Colors.white : Colors.grey[700],
+                                    fontSize: 14,
+                                    fontWeight: FontWeight.w500,
+                                    color: isSelected ? Colors.white : (isDark ? Colors.white70 : Colors.grey[700]),
                                   ),
                                 ),
                               ],
@@ -1654,30 +1740,44 @@ class _NoteEditorPageState extends State<NoteEditorPage> with SingleTickerProvid
                         );
                       }).toList(),
                     ),
-                    const SizedBox(height: 20),
+                    const SizedBox(height: 24),
                     if (_tags.isNotEmpty)
                       Padding(
-                        padding: const EdgeInsets.only(bottom: 12),
-                        child: Wrap(
-                          spacing: 8,
-                          runSpacing: 8,
-                          children: _tags.map((tag) {
-                            return Chip(
-                              label: Text('#$tag', style: const TextStyle(fontSize: 12)),
-                              deleteIcon: Container(
-                                padding: const EdgeInsets.all(2),
-                                decoration: BoxDecoration(
-                                  color: Colors.grey[300],
-                                  borderRadius: BorderRadius.circular(10),
-                                ),
-                                child: const Icon(Icons.close, size: 14, color: Colors.black54),
+                        padding: const EdgeInsets.only(bottom: 16),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              '🏷️ 已添加标签',
+                              style: TextStyle(
+                                fontSize: 16,
+                                fontWeight: FontWeight.w600,
+                                color: Colors.grey[600],
                               ),
-                              onDeleted: () => _removeTag(tag),
-                              backgroundColor: Colors.grey[100],
-                              padding: const EdgeInsets.symmetric(horizontal: 4),
-                              materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                            );
-                          }).toList(),
+                            ),
+                            const SizedBox(height: 12),
+                            Wrap(
+                              spacing: 8,
+                              runSpacing: 8,
+                              children: _tags.map((tag) {
+                                return Chip(
+                                  label: Text('#$tag', style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w500)),
+                                  deleteIcon: Container(
+                                    padding: const EdgeInsets.all(4),
+                                    decoration: BoxDecoration(
+                                      color: Colors.grey[300],
+                                      borderRadius: BorderRadius.circular(10),
+                                    ),
+                                    child: const Icon(Icons.close, size: 14, color: Colors.black54),
+                                  ),
+                                  onDeleted: () => _removeTag(tag),
+                                  backgroundColor: Colors.grey[100],
+                                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                                  materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                                );
+                              }).toList(),
+                            ),
+                          ],
                         ),
                       ),
                   ],
@@ -1710,8 +1810,8 @@ class _NoteEditorPageState extends State<NoteEditorPage> with SingleTickerProvid
           children: [
             Row(
               children: [
-                Icon(Icons.label_outline, size: 20, color: isDark ? Colors.white54 : Colors.grey[600]),
-                const SizedBox(width: 8),
+                Icon(Icons.label_outline, size: 22, color: isDark ? Colors.white54 : Colors.grey[600]),
+                const SizedBox(width: 12),
                 Expanded(
                   child: TextField(
                     controller: _tagController,
@@ -1719,58 +1819,54 @@ class _NoteEditorPageState extends State<NoteEditorPage> with SingleTickerProvid
                       hintText: '添加标签...',
                       border: InputBorder.none,
                       isDense: true,
-                      contentPadding: const EdgeInsets.symmetric(vertical: 8),
+                      contentPadding: const EdgeInsets.symmetric(vertical: 12),
                       hintStyle: TextStyle(color: isDark ? Colors.white38 : Colors.grey[400]),
                     ),
-                    style: TextStyle(color: isDark ? Colors.white : Colors.black87),
+                    style: TextStyle(color: isDark ? Colors.white : Colors.black87, fontSize: 15),
                     onSubmitted: (_) => _addTag(),
                   ),
                 ),
                 IconButton(
-                  icon: Icon(Icons.add_circle, color: isDark ? Colors.white54 : const Color(0xFF6366F1)),
+                  icon: Icon(Icons.add_circle, size: 28, color: isDark ? Colors.white54 : const Color(0xFF6366F1)),
                   onPressed: _addTag,
                 ),
               ],
             ),
-            const SizedBox(height: 12),
-            SizedBox(
-              height: 40,
-              child: ListView.builder(
-                scrollDirection: Axis.horizontal,
-                itemCount: _colors.length,
-                itemBuilder: (context, index) {
-                  final isSelected = _selectedColor == _colors[index];
-                  return GestureDetector(
-                    onTap: () {
-                      setState(() => _selectedColor = _colors[index]);
-                    },
-                    child: AnimatedContainer(
-                      duration: const Duration(milliseconds: 200),
-                      margin: const EdgeInsets.only(right: 8),
-                      width: 40,
-                      height: 40,
-                      decoration: BoxDecoration(
-                        color: Color(_colors[index]),
-                        borderRadius: BorderRadius.circular(12),
-                        border: isSelected
-                            ? Border.all(color: const Color(0xFF6366F1), width: 3)
-                            : Border.all(color: Colors.grey[300]!, width: 1),
-                        boxShadow: isSelected
-                            ? [
-                                BoxShadow(
-                                  color: const Color(0xFF6366F1).withOpacity(0.3),
-                                  blurRadius: 8,
-                                ),
-                              ]
-                            : null,
-                      ),
-                      child: isSelected
-                          ? const Icon(Icons.check, color: Color(0xFF6366F1), size: 20)
+            const SizedBox(height: 16),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: _colors.asMap().entries.map((entry) {
+                final index = entry.key;
+                final color = entry.value;
+                final isSelected = _selectedColor == color;
+                return GestureDetector(
+                  onTap: () {
+                    setState(() => _selectedColor = color);
+                  },
+                  child: AnimatedContainer(
+                    duration: const Duration(milliseconds: 200),
+                    margin: EdgeInsets.only(right: index < _colors.length - 1 ? 12 : 0),
+                    width: isSelected ? 52 : 40,
+                    height: isSelected ? 52 : 40,
+                    decoration: BoxDecoration(
+                      color: Color(color),
+                      borderRadius: BorderRadius.circular(isSelected ? 16 : 12),
+                      border: isSelected
+                          ? Border.all(color: const Color(0xFF6366F1), width: 3)
+                          : Border.all(color: isDark ? Colors.white24 : Colors.grey[300]!, width: 1),
+                      boxShadow: isSelected
+                          ? [BoxShadow(
+                              color: const Color(0xFF6366F1).withOpacity(0.3),
+                              blurRadius: 12,
+                            )]
                           : null,
                     ),
-                  );
-                },
-              ),
+                    child: isSelected
+                        ? const Icon(Icons.check, color: Color(0xFF6366F1), size: 22)
+                        : null,
+                  ),
+                );
+              }).toList(),
             ),
           ],
         ),
