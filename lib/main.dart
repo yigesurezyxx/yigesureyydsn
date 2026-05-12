@@ -47,18 +47,20 @@ class _NoteHomePageState extends State<NoteHomePage> with TickerProviderStateMix
   Set<String> _selectedTags = {};
   
   final TextEditingController _searchController = TextEditingController();
-  final AnimationController _fabAnimationController = AnimationController(
-    vsync: this,
-    duration: const Duration(milliseconds: 300),
-  );
-  final AnimationController _refreshAnimationController = AnimationController(
-    vsync: this,
-    duration: const Duration(milliseconds: 800),
-  );
+  late AnimationController _fabAnimationController;
+  late AnimationController _refreshAnimationController;
 
   @override
   void initState() {
     super.initState();
+    _fabAnimationController = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 300),
+    );
+    _refreshAnimationController = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 800),
+    );
     _loadNotes();
     _refreshAnimationController.repeat();
   }
