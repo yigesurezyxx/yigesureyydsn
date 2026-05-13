@@ -95,7 +95,8 @@ class _YeahAppState extends State<YeahApp> {
     return MaterialApp(
       title: 'yeah',
       debugShowCheckedModeBanner: false,
-      theme: _currentTheme.toThemeData(),
+      theme: AppTheme.lightTheme,
+      darkTheme: AppTheme.darkTheme,
       themeMode: ThemeMode.system,
       home: NoteHomePage(
         onThemeChanged: _changeTheme,
@@ -674,21 +675,28 @@ class _NoteHomePageState extends State<NoteHomePage> with TickerProviderStateMix
   @override
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
-    final stats = _stats;
 
     return Scaffold(
+      backgroundColor: isDark ? AppColors.backgroundDark : AppColors.backgroundLight,
       body: _isLoading
           ? _buildLoadingScreen(isDark)
           : CustomScrollView(
               slivers: [
-                _buildHeader(isDark, stats),
-                _buildSearchBar(isDark),
-                _buildQuickStats(isDark, stats),
-                _buildTagFilter(isDark),
+                SliverToBoxAdapter(child: _buildNewHeader()),
+                SliverToBoxAdapter(child: const SizedBox(height: 16)),
+                _buildQuickActions(),
+                SliverToBoxAdapter(child: const SizedBox(height: 16)),
+                _buildTagSection(),
+                SliverToBoxAdapter(child: const SizedBox(height: 8)),
                 _buildNotesList(isDark),
               ],
             ),
-      floatingActionButton: _buildAnimatedFab(),
+      floatingActionButtonLocation: FloatingActionButtonLocation.centerDocked,
+      floatingActionButton: _buildNewFab(),
+      bottomNavigationBar: CustomBottomNavigation(
+        currentIndex: 0,
+        onTap: (index) => _handleNavigation(index),
+      ),
     );
   }
 
@@ -1161,81 +1169,195 @@ class _NoteHomePageState extends State<NoteHomePage> with TickerProviderStateMix
   }
 
   Widget _buildAnimatedCard(int index, bool isDark) {
-    return TweenAnimationBuilder<double>(
-      tween: Tween(begin: 0.0, end: 1.0),
-      duration: Duration(milliseconds: 300 + (index * 50).clamp(0, 300)),
-      curve: Curves.easeOutBack,
-      builder: (context, value, child) {
-        return Transform.translate(
-          offset: Offset(0, 30 * (1 - value)),
-          child: Opacity(
-            opacity: value,
-            child: child,
-          ),
-        );
-      },
-      child: _NoteCard(
-        note: _filteredNotes[index],
-        onTap: () => _editNote(_filteredNotes[index]),
-        onDelete: () => _deleteNote(_filteredNotes[index], index),
-        onFavorite: () => _toggleFavorite(_filteredNotes[index]),
-        isDark: isDark,
+    final note = _filteredNotes[index];
+    return AnimatedListItem(
+      index: index,
+      child: NoteGridCard(
+        title: note.title.isNotEmpty ? note.title : '无标题',
+        preview: note.content.isNotEmpty ? note.content : null,
+        category: note.category,
+        updatedAt: note.createdAt is DateTime 
+            ? note.createdAt 
+            : DateTime.tryParse(note.createdAt.toString()) ?? DateTime.now(),
+        isPinned: note.isPinned,
+        onTap: () => _editNote(note),
       ),
     );
   }
 
   Widget _buildAnimatedListItem(int index, bool isDark) {
-    return TweenAnimationBuilder<double>(
-      tween: Tween(begin: 0.0, end: 1.0),
-      duration: Duration(milliseconds: 200 + (index * 30).clamp(0, 200)),
-      curve: Curves.easeOut,
-      builder: (context, value, child) {
-        return Transform.translate(
-          offset: Offset(-50 * (1 - value), 0),
-          child: Opacity(
-            opacity: value,
-            child: child,
-          ),
-        );
-      },
-      child: _NoteListItem(
-        note: _filteredNotes[index],
-        onTap: () => _editNote(_filteredNotes[index]),
-        onDelete: () => _deleteNote(_filteredNotes[index], index),
-        onFavorite: () => _toggleFavorite(_filteredNotes[index]),
-        isDark: isDark,
+    final note = _filteredNotes[index];
+    return AnimatedListItem(
+      index: index,
+      child: NoteCard(
+        title: note.title.isNotEmpty ? note.title : '无标题',
+        content: note.content,
+        category: note.category,
+        tags: note.tags,
+        updatedAt: note.createdAt is DateTime 
+            ? note.createdAt 
+            : DateTime.tryParse(note.createdAt.toString()) ?? DateTime.now(),
+        isPinned: note.isPinned,
+        isFavorite: note.isFavorite,
+        images: note.images,
+        onTap: () => _editNote(note),
+        onFavoriteToggle: () => _toggleFavorite(note),
+        onDelete: () => _deleteNote(note, index),
+        onShare: () => _shareNote(note),
       ),
     );
   }
 
   Widget _buildCompactItem(int index, bool isDark) {
-    return _NoteCompactItem(
-      note: _filteredNotes[index],
-      onTap: () => _editNote(_filteredNotes[index]),
-      onDelete: () => _deleteNote(_filteredNotes[index], index),
-      onFavorite: () => _toggleFavorite(_filteredNotes[index]),
-      isDark: isDark,
+    final note = _filteredNotes[index];
+    return NoteCard(
+      title: note.title.isNotEmpty ? note.title : '无标题',
+      content: note.content,
+      category: note.category,
+      tags: note.tags,
+      updatedAt: note.createdAt is DateTime 
+          ? note.createdAt 
+          : DateTime.tryParse(note.createdAt.toString()) ?? DateTime.now(),
+      isPinned: note.isPinned,
+      isFavorite: note.isFavorite,
+      images: note.images,
+      onTap: () => _editNote(note),
+      onFavoriteToggle: () => _toggleFavorite(note),
+      onDelete: () => _deleteNote(note, index),
+      onShare: () => _shareNote(note),
     );
   }
 
-  Widget _buildAnimatedFab() {
-    return TweenAnimationBuilder<double>(
-      tween: Tween(begin: 0.0, end: 1.0),
-      duration: const Duration(milliseconds: 500),
-      curve: Curves.elasticOut,
-      builder: (context, value, child) {
-        return Transform.scale(
-          scale: value,
-          child: child,
-        );
-      },
-      child: FloatingActionButton.extended(
-        onPressed: _addNote,
-        elevation: 6,
-        backgroundColor: const Color(0xFF6366F1),
-        icon: const Icon(Icons.add, color: Colors.white, size: 24),
-        label: const Text('新建', style: TextStyle(fontWeight: FontWeight.w600, color: Colors.white)),
+  Widget _buildNewHeader() {
+    return HomeHeader(
+      onSearchTap: _showSearch,
+      onSettingsTap: _showSettings,
+      userName: '用户',
+    );
+  }
+
+  Widget _buildQuickActions() {
+    return SliverToBoxAdapter(
+      child: QuickActionsRow(
+        onActionTap: (index) {
+          switch (index) {
+            case 0:
+              _addNote();
+              break;
+            case 1:
+              _filterByFavorite();
+              break;
+            case 2:
+              _showTagsPage();
+              break;
+            case 3:
+              _showCategoriesPage();
+              break;
+          }
+        },
       ),
+    );
+  }
+
+  Widget _buildTagSection() {
+    final allTags = _getAllTags();
+    return SliverToBoxAdapter(
+      child: Column(
+        children: [
+          SectionHeader(
+            title: '标签',
+            icon: Icons.label_outline_rounded,
+          ),
+          TagsRow(
+            tags: allTags.take(10).toList(),
+            onTagTap: (tag) {
+              setState(() {
+                if (_selectedTags.contains(tag)) {
+                  _selectedTags.remove(tag);
+                } else {
+                  _selectedTags.add(tag);
+                }
+                _applyFilters();
+              });
+            },
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildNewFab() {
+    return ScaleTapEffect(
+      onTap: _addNote,
+      child: CustomFAB(
+        onPressed: _addNote,
+        label: '新建笔记',
+        icon: Icons.add_rounded,
+      ),
+    );
+  }
+
+  void _handleNavigation(int index) {
+    switch (index) {
+      case 0:
+        // 首页
+        break;
+      case 1:
+        // 笔记列表
+        break;
+      case 2:
+        _filterByFavorite();
+        break;
+      case 3:
+        _showTagsPage();
+        break;
+      case 4:
+        _showSettings();
+        break;
+    }
+  }
+
+  void _showSearch() {
+    showSearch(context: context, delegate: NoteSearchDelegate(_notes, (note) {
+      Navigator.push(
+        context,
+        MaterialPageRoute(builder: (context) => NoteEditorPage(note: note)),
+      );
+    }));
+  }
+
+  void _showSettings() {
+    Navigator.push(
+      context,
+      MaterialPageRoute(builder: (context) => const SettingsPage()),
+    );
+  }
+
+  void _showTagsPage() {
+    Navigator.push(
+      context,
+      MaterialPageRoute(builder: (context) => const TagsPage()),
+    );
+  }
+
+  void _showCategoriesPage() {
+    Navigator.push(
+      context,
+      MaterialPageRoute(builder: (context) => const CategoryPage()),
+    );
+  }
+
+  void _filterByFavorite() {
+    setState(() {
+      _filteredNotes = _notes.where((note) => note.isFavorite).toList();
+    });
+  }
+
+  void _shareNote(Note note) {
+    ShareService().shareNote(
+      note.title.isNotEmpty ? note.title : '无标题',
+      note.content,
+      note.images,
     );
   }
 
@@ -2617,199 +2739,89 @@ class _NoteEditorPageState extends State<NoteEditorPage> with SingleTickerProvid
       onWillPop: _onWillPop,
       child: Scaffold(
         backgroundColor: Color(_selectedColor),
-        appBar: AppBar(
-          backgroundColor: Colors.transparent,
-          elevation: 0,
-          leading: Padding(
-            padding: const EdgeInsets.only(left: 12),
-            child: IconButton(
-              icon: Icon(Icons.arrow_back, color: isDark ? Colors.white70 : Colors.grey[700], size: 28),
-              onPressed: () async {
-                if (await _onWillPop()) {
-                  Navigator.pop(context);
-                }
-              },
-            ),
-          ),
-          title: AnimatedSwitcher(
-            duration: const Duration(milliseconds: 300),
-            child: Text(
-              _isSaved ? '已保存' : '编辑中...',
-              key: ValueKey(_isSaved),
-              style: TextStyle(
-                fontSize: 14,
-                fontWeight: FontWeight.w500,
-                color: _isSaved ? Colors.green : Colors.orange,
+        body: SafeArea(
+          child: Column(
+            children: [
+              EditorHeader(
+                saveStatus: _isSaved ? '已保存' : '编辑中...',
+                onBack: () async {
+                  if (await _onWillPop()) {
+                    Navigator.pop(context);
+                  }
+                },
+                onShare: _shareNote,
+                onSave: _saveNote,
               ),
-            ),
-          ),
-          actions: [
-            IconButton(
-              icon: const Icon(Icons.share, size: 24),
-              onPressed: _shareNote,
-              color: isDark ? Colors.white70 : Colors.grey[700],
-            ),
-            Padding(
-              padding: const EdgeInsets.only(right: 12),
-              child: TextButton.icon(
-                onPressed: _saveNote,
-                style: TextButton.styleFrom(
-                  padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
-                  backgroundColor: const Color(0xFF6366F1),
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                ),
-                icon: const Icon(Icons.check, color: Colors.white, size: 22),
-                label: Text(widget.note != null ? '更新' : '保存', style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w600, fontSize: 16)),
-              ),
-            ),
-          ],
-        ),
-      body: Column(
-          children: [
-            Expanded(
-              child: SingleChildScrollView(
-                padding: const EdgeInsets.symmetric(horizontal: 20),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    TextField(
-                      controller: _titleController,
-                      decoration: InputDecoration(
-                        hintText: '📝 给笔记起个标题...',
-                        border: InputBorder.none,
-                        hintStyle: TextStyle(
+              Expanded(
+                child: SingleChildScrollView(
+                  padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      TextField(
+                        controller: _titleController,
+                        decoration: InputDecoration(
+                          hintText: '给笔记起个标题...',
+                          border: InputBorder.none,
+                          hintStyle: TextStyle(
+                            fontSize: 24,
+                            fontWeight: FontWeight.bold,
+                            color: Colors.grey[400],
+                          ),
+                        ),
+                        style: const TextStyle(
                           fontSize: 24,
                           fontWeight: FontWeight.bold,
-                          color: Colors.grey[400],
+                          color: Color(0xFF1A1A1A),
                         ),
+                        autofocus: widget.note == null,
                       ),
-                      style: const TextStyle(
-                        fontSize: 24,
-                        fontWeight: FontWeight.bold,
-                        color: Color(0xFF1A1A1A),
-                      ),
-                      autofocus: widget.note == null,
-                    ),
-                    const SizedBox(height: 8),
-                    TextField(
-                      controller: _contentController,
-                      focusNode: _contentFocusNode,
-                      decoration: InputDecoration(
-                        hintText: '开始记录你的想法...',
-                        border: InputBorder.none,
-                        hintStyle: TextStyle(color: Colors.grey[400]),
-                      ),
-                      style: const TextStyle(
-                        fontSize: 16,
-                        color: Color(0xFF333333),
-                        height: 1.6,
-                      ),
-                      maxLines: null,
-                      minLines: 10,
-                      keyboardType: TextInputType.multiline,
-                    ),
-                    const SizedBox(height: 24),
-                    Text(
-                      '🎭 选择心情',
-                      style: TextStyle(
-                        fontSize: 16,
-                        fontWeight: FontWeight.w600,
-                        color: Colors.grey[600],
-                      ),
-                    ),
-                    const SizedBox(height: 12),
-                    Wrap(
-                      spacing: 10,
-                      runSpacing: 10,
-                      children: _moods.map((mood) {
-                        final isSelected = _selectedMood == mood['emoji'];
-                        return GestureDetector(
-                          onTap: () {
-                            setState(() {
-                              _selectedMood = isSelected ? '' : mood['emoji']!;
-                            });
-                          },
-                          child: AnimatedContainer(
-                            duration: const Duration(milliseconds: 200),
-                            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-                            decoration: BoxDecoration(
-                              color: isSelected ? const Color(0xFF6366F1) : (isDark ? const Color(0xFF2D2D2D) : Colors.white),
-                              borderRadius: BorderRadius.circular(16),
-                              border: Border.all(
-                                color: isSelected ? const Color(0xFF6366F1) : (isDark ? Colors.white24 : Colors.grey[300]!),
-                              ),
-                              boxShadow: isSelected
-                                  ? [BoxShadow(
-                                      color: const Color(0xFF6366F1).withOpacity(0.3),
-                                      blurRadius: 12,
-                                    )]
-                                  : null,
-                            ),
-                            child: Row(
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                Text(mood['emoji']!, style: const TextStyle(fontSize: 24)),
-                                const SizedBox(width: 8),
-                                Text(
-                                  mood['label']!,
-                                  style: TextStyle(
-                                    fontSize: 14,
-                                    fontWeight: FontWeight.w500,
-                                    color: isSelected ? Colors.white : (isDark ? Colors.white70 : Colors.grey[700]),
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ),
-                        );
-                      }).toList(),
-                    ),
-                    const SizedBox(height: 24),
-                    if (_tags.isNotEmpty)
-                      Padding(
-                        padding: const EdgeInsets.only(bottom: 16),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              '🏷️ 已添加标签',
-                              style: TextStyle(
-                                fontSize: 16,
-                                fontWeight: FontWeight.w600,
-                                color: Colors.grey[600],
-                              ),
-                            ),
-                            const SizedBox(height: 12),
-                            Wrap(
-                              spacing: 8,
-                              runSpacing: 8,
-                              children: _tags.map((tag) {
-                                return Chip(
-                                  label: Text('#$tag', style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w500)),
-                                  deleteIcon: Container(
-                                    padding: const EdgeInsets.all(4),
-                                    decoration: BoxDecoration(
-                                      color: Colors.grey[300],
-                                      borderRadius: BorderRadius.circular(10),
-                                    ),
-                                    child: const Icon(Icons.close, size: 14, color: Colors.black54),
-                                  ),
-                                  onDeleted: () => _removeTag(tag),
-                                  backgroundColor: Colors.grey[100],
-                                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                                  materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                                );
-                              }).toList(),
-                            ),
-                          ],
+                      const SizedBox(height: 16),
+                      TextField(
+                        controller: _contentController,
+                        focusNode: _contentFocusNode,
+                        decoration: InputDecoration(
+                          hintText: '开始记录...',
+                          border: InputBorder.none,
+                          hintStyle: TextStyle(color: Colors.grey[400]),
                         ),
+                        style: const TextStyle(
+                          fontSize: 16,
+                          height: 1.6,
+                          color: Color(0xFF333333),
+                        ),
+                        maxLines: null,
+                        keyboardType: TextInputType.multiline,
                       ),
-                  ],
+                      const SizedBox(height: 16),
+                      if (_images.isNotEmpty) ...[
+                        ImageGallery(
+                          images: _images,
+                          onImageTap: (index) {},
+                          onImageDelete: (index) => _removeImage(index),
+                        ),
+                        const SizedBox(height: 16),
+                      ],
+                    ],
+                  ),
                 ),
               ),
-            ),
-            _buildBottomBar(isDark),
-          ],
+              EditorToolbar(
+                onBold: () => _applyFormatting('**', '**'),
+                onItalic: () => _applyFormatting('*', '*'),
+                onUnderline: () => _applyFormatting('__', '__'),
+                onList: () => _applyFormatting('- ', ''),
+                onQuote: () => _applyFormatting('> ', ''),
+                onCode: () => _applyFormatting('`', '`'),
+                onImage: _addImage,
+                onUndo: () {},
+                onRedo: () {},
+                onSave: _saveNote,
+                canUndo: true,
+                canRedo: true,
+              ),
+            ],
+          ),
         ),
       ),
     );
