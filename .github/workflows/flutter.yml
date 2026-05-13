@@ -28,17 +28,19 @@ jobs:
         channel: 'stable'
     
     - name: Decode keystore
-      if: secrets.KEYSTORE_FILE
       run: |
-        echo "${{ secrets.KEYSTORE_FILE }}" | base64 -d > android/app/keystore.jks
+        if [ -n "${{ secrets.KEYSTORE_FILE }}" ]; then
+          echo "${{ secrets.KEYSTORE_FILE }}" | base64 -d > android/app/keystore.jks
+        fi
     
     - name: Create key.properties
-      if: secrets.KEYSTORE_FILE
       run: |
-        echo "storePassword=${{ secrets.KEYSTORE_PASSWORD }}" > android/key.properties
-        echo "keyPassword=${{ secrets.KEY_PASSWORD }}" >> android/key.properties
-        echo "keyAlias=${{ secrets.KEY_ALIAS }}" >> android/key.properties
-        echo "storeFile=keystore.jks" >> android/key.properties
+        if [ -n "${{ secrets.KEYSTORE_FILE }}" ]; then
+          echo "storePassword=${{ secrets.KEYSTORE_PASSWORD }}" > android/key.properties
+          echo "keyPassword=${{ secrets.KEY_PASSWORD }}" >> android/key.properties
+          echo "keyAlias=${{ secrets.KEY_ALIAS }}" >> android/key.properties
+          echo "storeFile=keystore.jks" >> android/key.properties
+        fi
     
     - name: Get Flutter dependencies
       run: flutter pub get
