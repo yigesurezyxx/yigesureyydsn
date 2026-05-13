@@ -2902,7 +2902,7 @@ class _NoteEditorPageState extends State<NoteEditorPage> with SingleTickerProvid
             isDark: isDark,
           ),
           _FormatButton(
-            icon: Icons.quote,
+            icon: Icons.format_quote,
             label: '引用',
             onTap: () => _applyFormatting('> ', ''),
             isDark: isDark,
