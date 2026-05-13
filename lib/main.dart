@@ -648,20 +648,22 @@ class _NoteHomePageState extends State<NoteHomePage> with TickerProviderStateMix
 
     return Scaffold(
       backgroundColor: isDark ? AppColors.backgroundDark : AppColors.backgroundLight,
-      body: _isLoading
-          ? _buildLoadingScreen(isDark)
-          : CustomScrollView(
-              slivers: [
-                SliverToBoxAdapter(child: _buildNewHeader()),
-                SliverToBoxAdapter(child: const SizedBox(height: 16)),
-                _buildQuickActions(),
-                SliverToBoxAdapter(child: const SizedBox(height: 16)),
-                _buildTagSection(),
-                SliverToBoxAdapter(child: const SizedBox(height: 8)),
-                _buildNotesList(isDark),
-              ],
-            ),
-      floatingActionButtonLocation: FloatingActionButtonLocation.centerDocked,
+      body: SafeArea(
+        child: _isLoading
+            ? _buildLoadingScreen(isDark)
+            : CustomScrollView(
+                slivers: [
+                  SliverToBoxAdapter(child: _buildNewHeader()),
+                  SliverToBoxAdapter(child: const SizedBox(height: 16)),
+                  _buildQuickActions(),
+                  SliverToBoxAdapter(child: const SizedBox(height: 16)),
+                  _buildTagSection(),
+                  SliverToBoxAdapter(child: const SizedBox(height: 8)),
+                  _buildNotesList(isDark),
+                ],
+              ),
+      ),
+      floatingActionButtonLocation: FloatingActionButtonLocation.endFloat,
       floatingActionButton: _buildNewFab(),
       bottomNavigationBar: CustomBottomNavigation(
         currentIndex: 0,
