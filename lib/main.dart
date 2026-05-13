@@ -142,15 +142,10 @@ class _NoteHomePageState extends State<NoteHomePage> with TickerProviderStateMix
   bool _showAdvancedFilters = false;
   
   final TextEditingController _searchController = TextEditingController();
-  late AnimationController _fabAnimationController;
 
   @override
   void initState() {
     super.initState();
-    _fabAnimationController = AnimationController(
-      vsync: this,
-      duration: const Duration(milliseconds: 300),
-    );
     _loadNotes();
     _checkBackupReminder();
   }
@@ -448,18 +443,24 @@ class _NoteHomePageState extends State<NoteHomePage> with TickerProviderStateMix
           isFromTemplate: note != null,
         ),
         transitionsBuilder: (_, animation, __, child) {
-          return SlideTransition(
-            position: Tween<Offset>(
-              begin: const Offset(0, 1),
-              end: Offset.zero,
-            ).animate(CurvedAnimation(
+          return FadeTransition(
+            opacity: CurvedAnimation(
               parent: animation,
-              curve: Curves.easeOutCubic,
-            )),
-            child: child,
+              curve: const Interval(0.0, 0.6, curve: Curves.easeOut),
+            ),
+            child: SlideTransition(
+              position: Tween<Offset>(
+                begin: const Offset(0, 0.1),
+                end: Offset.zero,
+              ).animate(CurvedAnimation(
+                parent: animation,
+                curve: Curves.easeOutCubic,
+              )),
+              child: child,
+            ),
           );
         },
-        transitionDuration: const Duration(milliseconds: 400),
+        transitionDuration: const Duration(milliseconds: 280),
       ),
     ).then((newNote) {
       if (newNote != null && newNote is Note) {
@@ -479,16 +480,22 @@ class _NoteHomePageState extends State<NoteHomePage> with TickerProviderStateMix
         pageBuilder: (_, animation, __) => NoteEditorPage(note: note),
         transitionsBuilder: (_, animation, __, child) {
           return FadeTransition(
-            opacity: animation,
+            opacity: CurvedAnimation(
+              parent: animation,
+              curve: const Interval(0.0, 0.5, curve: Curves.easeOut),
+            ),
             child: ScaleTransition(
-              scale: Tween<double>(begin: 0.95, end: 1.0).animate(
-                CurvedAnimation(parent: animation, curve: Curves.easeOut),
+              scale: Tween<double>(begin: 0.97, end: 1.0).animate(
+                CurvedAnimation(
+                  parent: animation,
+                  curve: Curves.easeOutCubic,
+                ),
               ),
               child: child,
             ),
           );
         },
-        transitionDuration: const Duration(milliseconds: 300),
+        transitionDuration: const Duration(milliseconds: 220),
       ),
     ).then((updatedNote) {
       if (updatedNote != null && updatedNote is Note) {
@@ -1102,7 +1109,6 @@ class _NoteHomePageState extends State<NoteHomePage> with TickerProviderStateMix
   @override
   void dispose() {
     _searchController.dispose();
-    _fabAnimationController.dispose();
     super.dispose();
   }
 

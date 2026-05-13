@@ -225,24 +225,28 @@ class AnimatedPageTransition extends PageRouteBuilder {
 class AnimatedListItem extends StatelessWidget {
   final Widget child;
   final int index;
+  final bool animate;
 
   const AnimatedListItem({
     super.key,
     required this.child,
     required this.index,
+    this.animate = true,
   });
 
   @override
   Widget build(BuildContext context) {
+    if (!animate) return child;
+    
     return TweenAnimationBuilder<double>(
       tween: Tween(begin: 0.0, end: 1.0),
-      duration: Duration(milliseconds: 200 + (index * 50)),
-      curve: AppCurves.standard,
+      duration: Duration(milliseconds: 180 + (index.clamp(0, 5) * 30)),
+      curve: Curves.easeOutCubic,
       builder: (context, value, child) {
         return Opacity(
           opacity: value,
           child: Transform.translate(
-            offset: Offset(0, 20 * (1 - value)),
+            offset: Offset(0, 15 * (1 - value)),
             child: child,
           ),
         );
@@ -278,14 +282,14 @@ class _ScaleTapEffectState extends State<ScaleTapEffect>
     super.initState();
     _controller = AnimationController(
       vsync: this,
-      duration: AppDurations.fast,
+      duration: const Duration(milliseconds: 100),
     );
     _scaleAnimation = Tween<double>(
       begin: 1.0,
       end: widget.scaleFactor,
     ).animate(CurvedAnimation(
       parent: _controller,
-      curve: AppCurves.standard,
+      curve: Curves.easeInOut,
     ));
   }
 
@@ -300,8 +304,8 @@ class _ScaleTapEffectState extends State<ScaleTapEffect>
     return GestureDetector(
       onTapDown: (_) => _controller.forward(),
       onTapUp: (_) {
-        _controller.reverse();
         widget.onTap();
+        _controller.reverse();
       },
       onTapCancel: () => _controller.reverse(),
       child: AnimatedBuilder(
