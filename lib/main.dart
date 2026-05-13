@@ -196,10 +196,8 @@ class _NoteHomePageState extends State<NoteHomePage> with TickerProviderStateMix
   }
 
   Future<void> _loadNotes() async {
-    debugPrint('=== [DEBUG] _loadNotes: 开始加载笔记 ===');
     try {
       final notes = await DatabaseService.getAllNotes();
-      debugPrint('=== [DEBUG] _loadNotes: 从数据库加载了 ${notes.length} 条笔记 ===');
       setState(() {
         _notes.clear();
         _notes.addAll(notes);
@@ -1023,8 +1021,6 @@ class _NoteHomePageState extends State<NoteHomePage> with TickerProviderStateMix
 
   Widget _buildNewFab() {
     return AnimatedFAB(
-      onPressed: () {},
-      delayMs: 300,
       child: ScaleTapEffect(
         onTap: _addNote,
         child: CustomFAB(
@@ -1830,16 +1826,10 @@ class _NoteEditorPageState extends State<NoteEditorPage> with SingleTickerProvid
       images: _images,
     );
 
-    debugPrint('=== [DEBUG] _saveNote: 创建的 Note 对象 ===');
-    debugPrint('  - id: ${note.id}');
-    debugPrint('  - title: ${note.title}');
-    
     try {
       if (widget.note == null || widget.isFromTemplate) {
-        debugPrint('  - 调用 insertNote');
         await DatabaseService.insertNote(note);
       } else {
-        debugPrint('  - 调用 updateNote');
         await DatabaseService.updateNote(note);
       }
     } catch (e) {
@@ -2514,10 +2504,6 @@ class DatabaseService {
   
   static Future<void> insertNote(Note note) async {
     final db = await database;
-    debugPrint('=== [DEBUG] insertNote: 开始保存笔记 ===');
-    debugPrint('  - id: ${note.id}');
-    debugPrint('  - title: ${note.title}');
-    debugPrint('  - content: ${note.content.substring(0, note.content.length > 50 ? 50 : note.content.length)}...');
     await db.insert(
       'notes',
       {
@@ -2536,7 +2522,6 @@ class DatabaseService {
       },
       conflictAlgorithm: ConflictAlgorithm.replace,
     );
-    debugPrint('  - insertNote: 保存完成!');
   }
   
   static Future<void> updateNote(Note note) async {
@@ -2584,10 +2569,6 @@ class DatabaseService {
   static Future<List<Note>> getAllNotes() async {
     final db = await database;
     final maps = await db.query('notes', orderBy: 'createdAt DESC');
-    debugPrint('=== [DEBUG] getAllNotes: 找到 ${maps.length} 条笔记 ===');
-    for (final m in maps) {
-      debugPrint('  - id: ${m['id']}, title: ${m['title']}');
-    }
     return maps.map((map) => Note.fromJson(map)).toList();
   }
   
