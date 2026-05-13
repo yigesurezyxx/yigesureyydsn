@@ -28,12 +28,12 @@ jobs:
         channel: 'stable'
     
     - name: Decode keystore
-      if: ${{ secrets.KEYSTORE_FILE != '' }}
+      if: secrets.KEYSTORE_FILE
       run: |
         echo "${{ secrets.KEYSTORE_FILE }}" | base64 -d > android/app/keystore.jks
     
     - name: Create key.properties
-      if: ${{ secrets.KEYSTORE_FILE != '' }}
+      if: secrets.KEYSTORE_FILE
       run: |
         echo "storePassword=${{ secrets.KEYSTORE_PASSWORD }}" > android/key.properties
         echo "keyPassword=${{ secrets.KEY_PASSWORD }}" >> android/key.properties
