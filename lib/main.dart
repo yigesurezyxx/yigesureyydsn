@@ -9,6 +9,8 @@ import 'package:file_picker/file_picker.dart';
 import 'package:sqflite/sqflite.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:path/path.dart' as path;
+import 'services/share_service.dart';
+import 'pages/share_import_page.dart';
 
 void main() {
   WidgetsFlutterBinding.ensureInitialized();
@@ -30,11 +32,40 @@ class YeahApp extends StatefulWidget {
 
 class _YeahAppState extends State<YeahApp> {
   AppTheme _currentTheme = ThemeService.appThemes[0];
+  ShareData? _pendingShareData;
 
   @override
   void initState() {
     super.initState();
     _loadTheme();
+    _initShareListener();
+  }
+
+  void _initShareListener() {
+    ShareService().initializeShareListener((shareData) {
+      setState(() {
+        _pendingShareData = shareData;
+      });
+    });
+
+    Future.delayed(const Duration(milliseconds: 500), () {
+      ShareData? data = ShareService().getPendingShareData();
+      if (data != null && mounted) {
+        _navigateToShareImport(data);
+      }
+    });
+  }
+
+  void _navigateToShareImport(ShareData data) async {
+    final result = await Navigator.push(
+      context,
+      MaterialPageRoute(builder: (context) => ShareImportPage(shareData: data)),
+    );
+    if (result == true) {
+      setState(() {
+        _pendingShareData = null;
+      });
+    }
   }
 
   Future<void> _loadTheme() async {
@@ -51,6 +82,12 @@ class _YeahAppState extends State<YeahApp> {
     setState(() {
       _currentTheme = theme;
     });
+  }
+
+  @override
+  void dispose() {
+    ShareService().dispose();
+    super.dispose();
   }
 
   @override
@@ -2464,6 +2501,16 @@ class _NoteEditorPageState extends State<NoteEditorPage> with SingleTickerProvid
     }
   }
 
+  Future<void> _shareNote() async {
+    final title = _titleController.text.trim();
+    final content = _contentController.text.trim();
+    await ShareService().shareNote(
+      title.isEmpty ? '无标题笔记' : title,
+      content,
+      _images,
+    );
+  }
+
   Future<bool> _onWillPop() async {
     if (_isSaved) return true;
     
@@ -2597,6 +2644,11 @@ class _NoteEditorPageState extends State<NoteEditorPage> with SingleTickerProvid
             ),
           ),
           actions: [
+            IconButton(
+              icon: const Icon(Icons.share, size: 24),
+              onPressed: _shareNote,
+              color: isDark ? Colors.white70 : Colors.grey[700],
+            ),
             Padding(
               padding: const EdgeInsets.only(right: 12),
               child: TextButton.icon(
