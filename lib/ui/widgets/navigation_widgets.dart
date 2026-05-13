@@ -201,19 +201,21 @@ class AnimatedPageTransition extends PageRouteBuilder {
       : super(
           pageBuilder: (context, animation, secondaryAnimation) => page,
           transitionsBuilder: (context, animation, secondaryAnimation, child) {
+            final curvedAnimation = CurvedAnimation(
+              parent: animation,
+              curve: Curves.easeOutCubic,
+              reverseCurve: Curves.easeInOutCubic,
+            );
             return FadeTransition(
               opacity: CurvedAnimation(
                 parent: animation,
-                curve: AppCurves.standard,
+                curve: const Interval(0.0, 0.7, curve: Curves.easeOut),
               ),
               child: SlideTransition(
                 position: Tween<Offset>(
-                  begin: const Offset(0, 0.05),
+                  begin: const Offset(0.03, 0),
                   end: Offset.zero,
-                ).animate(CurvedAnimation(
-                  parent: animation,
-                  curve: AppCurves.standard,
-                )),
+                ).animate(curvedAnimation),
                 child: child,
               ),
             );

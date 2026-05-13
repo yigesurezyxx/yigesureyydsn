@@ -43,10 +43,10 @@ class AppColors {
 }
 
 class AppDurations {
-  static const Duration fast = Duration(milliseconds: 80);
-  static const Duration normal = Duration(milliseconds: 120);
-  static const Duration slow = Duration(milliseconds: 160);
-  static const Duration page = Duration(milliseconds: 180);
+  static const Duration fast = Duration(milliseconds: 200);
+  static const Duration normal = Duration(milliseconds: 280);
+  static const Duration slow = Duration(milliseconds: 350);
+  static const Duration page = Duration(milliseconds: 320);
 }
 
 class AppCurves {
@@ -54,6 +54,7 @@ class AppCurves {
   static const Curve bounce = Curves.elasticOut;
   static const Curve smooth = Curves.easeInOutCubic;
   static const Curve snappy = Curves.easeOutQuart;
+  static const Curve natural = Curves.fastOutSlowIn;
 }
 
 class AppTheme {

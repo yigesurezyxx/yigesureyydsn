@@ -443,24 +443,23 @@ class _NoteHomePageState extends State<NoteHomePage> with TickerProviderStateMix
           isFromTemplate: note != null,
         ),
         transitionsBuilder: (_, animation, __, child) {
+          final curvedAnimation = CurvedAnimation(
+            parent: animation,
+            curve: Curves.easeOutQuart,
+            reverseCurve: Curves.easeInQuart,
+          );
           return FadeTransition(
-            opacity: CurvedAnimation(
-              parent: animation,
-              curve: const Interval(0.0, 0.6, curve: Curves.easeOut),
-            ),
+            opacity: curvedAnimation,
             child: SlideTransition(
               position: Tween<Offset>(
-                begin: const Offset(0, 0.1),
+                begin: const Offset(0, 0.08),
                 end: Offset.zero,
-              ).animate(CurvedAnimation(
-                parent: animation,
-                curve: Curves.easeOutCubic,
-              )),
+              ).animate(curvedAnimation),
               child: child,
             ),
           );
         },
-        transitionDuration: const Duration(milliseconds: 180),
+        transitionDuration: const Duration(milliseconds: 300),
       ),
     ).then((newNote) {
       if (newNote != null && newNote is Note) {
