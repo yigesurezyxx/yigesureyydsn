@@ -2509,6 +2509,8 @@ class DatabaseService {
         'mood': note.mood,
         'images': json.encode(note.images),
         'updatedAt': DateTime.now().toIso8601String(),
+        'category': note.category,
+        'isPinned': note.isPinned ? 1 : 0,
       },
       conflictAlgorithm: ConflictAlgorithm.replace,
     );
@@ -2541,6 +2543,8 @@ class DatabaseService {
         'images': json.encode(note.images),
         'isFavorite': note.isFavorite ? 1 : 0,
         'updatedAt': DateTime.now().toIso8601String(),
+        'category': note.category,
+        'isPinned': note.isPinned ? 1 : 0,
       },
       where: 'id = ?',
       whereArgs: [note.id],
