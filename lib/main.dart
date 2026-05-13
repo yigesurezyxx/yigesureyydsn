@@ -17,6 +17,7 @@ import 'ui/widgets/note_card_widget.dart';
 import 'ui/widgets/home_page_widgets.dart';
 import 'ui/widgets/navigation_widgets.dart';
 import 'ui/widgets/editor_widgets.dart';
+import 'ui/widgets/animations.dart';
 
 void main() {
   WidgetsFlutterBinding.ensureInitialized();
@@ -1021,12 +1022,16 @@ class _NoteHomePageState extends State<NoteHomePage> with TickerProviderStateMix
   }
 
   Widget _buildNewFab() {
-    return ScaleTapEffect(
-      onTap: _addNote,
-      child: CustomFAB(
-        onPressed: _addNote,
-        label: '新建笔记',
-        icon: Icons.add_rounded,
+    return AnimatedFAB(
+      onPressed: () {},
+      delayMs: 300,
+      child: ScaleTapEffect(
+        onTap: _addNote,
+        child: CustomFAB(
+          onPressed: _addNote,
+          label: '新建笔记',
+          icon: Icons.add_rounded,
+        ),
       ),
     );
   }
