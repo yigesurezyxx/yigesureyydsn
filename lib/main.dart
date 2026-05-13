@@ -68,48 +68,6 @@ class _YeahAppState extends State<YeahApp> {
   }
 }
 
-class YeahApp extends StatelessWidget {
-  const YeahApp({super.key});
-
-  @override
-  Widget build(BuildContext context) {
-    return MaterialApp(
-      title: 'yeah',
-      debugShowCheckedModeBanner: false,
-      theme: ThemeData(
-        useMaterial3: true,
-        brightness: Brightness.light,
-        colorScheme: ColorScheme.fromSeed(
-          seedColor: const Color(0xFF6366F1),
-          brightness: Brightness.light,
-        ),
-        fontFamily: 'Roboto',
-        scaffoldBackgroundColor: const Color(0xFFF8F9FA),
-        appBarTheme: const AppBarTheme(
-          centerTitle: true,
-          elevation: 0,
-        ),
-      ),
-      darkTheme: ThemeData(
-        useMaterial3: true,
-        brightness: Brightness.dark,
-        colorScheme: ColorScheme.fromSeed(
-          seedColor: const Color(0xFF6366F1),
-          brightness: Brightness.dark,
-        ),
-        fontFamily: 'Roboto',
-        scaffoldBackgroundColor: const Color(0xFF121212),
-        appBarTheme: const AppBarTheme(
-          centerTitle: true,
-          elevation: 0,
-        ),
-      ),
-      themeMode: ThemeMode.system,
-      home: const NoteHomePage(),
-    );
-  }
-}
-
 class NoteHomePage extends StatefulWidget {
   final Function(AppTheme) onThemeChanged;
   final AppTheme currentTheme;
@@ -2654,9 +2612,7 @@ class _NoteEditorPageState extends State<NoteEditorPage> with SingleTickerProvid
             ),
           ],
         ),
-      body: FadeTransition(
-        opacity: _fadeAnimation,
-        child: Column(
+      body: Column(
           children: [
             Expanded(
               child: SingleChildScrollView(
@@ -3166,6 +3122,10 @@ class NoteTemplate {
 }
 
 class NoteTemplateService {
+  static List<NoteTemplate> getTemplates() {
+    return defaultTemplates;
+  }
+
   static const List<NoteTemplate> defaultTemplates = [
     NoteTemplate(
       id: 'diary',
@@ -3173,7 +3133,7 @@ class NoteTemplateService {
       description: '记录一天的心情和事件',
       icon: '📔',
       color: 0xFFFFF5E6,
-      title: '${DateTime.now().year}/${DateTime.now().month}/${DateTime.now().day} 日记',
+      title: '', // 将在运行时动态生成
       content: '📅 今日日期：\n🌤️ 今日心情：\n📝 今日收获：\n✨ 明日计划：',
       defaultTags: ['日记'],
       mood: '✨',
