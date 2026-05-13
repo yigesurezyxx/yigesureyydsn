@@ -11,6 +11,8 @@ import 'package:image_picker/image_picker.dart';
 import 'package:path/path.dart' as path;
 import 'services/share_service.dart';
 import 'pages/share_import_page.dart';
+import 'pages/settings_page.dart';
+import 'ui/theme/app_theme.dart';
 import 'ui/widgets/note_card_widget.dart';
 import 'ui/widgets/home_page_widgets.dart';
 import 'ui/widgets/navigation_widgets.dart';
@@ -35,7 +37,7 @@ class YeahApp extends StatefulWidget {
 }
 
 class _YeahAppState extends State<YeahApp> {
-  AppTheme _currentTheme = ThemeService.appThemes[0];
+  AppThemeConfig _currentTheme = ThemeService.appThemes[0];
   ShareData? _pendingShareData;
 
   @override
@@ -81,7 +83,7 @@ class _YeahAppState extends State<YeahApp> {
     }
   }
 
-  void _changeTheme(AppTheme theme) async {
+  void _changeTheme(AppThemeConfig theme) async {
     await ThemeService.saveTheme(theme.id);
     setState(() {
       _currentTheme = theme;
@@ -111,8 +113,8 @@ class _YeahAppState extends State<YeahApp> {
 }
 
 class NoteHomePage extends StatefulWidget {
-  final Function(AppTheme) onThemeChanged;
-  final AppTheme currentTheme;
+  final Function(AppThemeConfig) onThemeChanged;
+  final AppThemeConfig currentTheme;
 
   const NoteHomePage({
     super.key,
@@ -200,41 +202,20 @@ class _NoteHomePageState extends State<NoteHomePage> with TickerProviderStateMix
   Future<void> _loadNotes() async {
     try {
       final notes = await DatabaseService.getAllNotes();
-      if (notes.isEmpty) {
-        _addDemoNotes();
-        setState(() {
-          _isLoading = false;
-        });
-      } else {
-        setState(() {
-          _notes.clear();
-          _notes.addAll(notes);
-          _applyFilters();
-          _isLoading = false;
-        });
-      }
+      setState(() {
+        _notes.clear();
+        _notes.addAll(notes);
+        _applyFilters();
+        _isLoading = false;
+      });
     } catch (e) {
       debugPrint('加载笔记失败: $e');
-      try {
-        final prefs = await SharedPreferences.getInstance();
-        final notesJson = prefs.getString('notes');
-        if (notesJson != null && notesJson.isNotEmpty) {
-          final List<dynamic> notesList = json.decode(notesJson);
-          setState(() {
-            _notes.addAll(notesList.map((json) => Note.fromJson(json)));
-            _applyFilters();
-            _isLoading = false;
-          });
-        } else {
-          _addDemoNotes();
-          setState(() => _isLoading = false);
-        }
-      } catch (e2) {
-        _addDemoNotes();
-        setState(() => _isLoading = false);
-      }
+      setState(() {
+        _notes.clear();
+        _applyFilters();
+        _isLoading = false;
+      });
     }
-    
     await _loadSearchHistory();
   }
 
@@ -329,13 +310,6 @@ class _NoteHomePageState extends State<NoteHomePage> with TickerProviderStateMix
       }
     } catch (e) {
       debugPrint('保存笔记失败: $e');
-      try {
-        final prefs = await SharedPreferences.getInstance();
-        final notesJson = json.encode(_notes.map((n) => n.toJson()).toList());
-        await prefs.setString('notes', notesJson);
-      } catch (e2) {
-        debugPrint('备用保存失败: $e2');
-      }
     }
   }
 
@@ -570,14 +544,6 @@ class _NoteHomePageState extends State<NoteHomePage> with TickerProviderStateMix
       }
     } catch (e) {
       debugPrint('删除图片失败: $e');
-    }
-    
-    try {
-      final prefs = await SharedPreferences.getInstance();
-      final notesJson = json.encode(_notes.map((n) => n.toJson()).toList());
-      await prefs.setString('notes', notesJson);
-    } catch (e) {
-      debugPrint('备用保存失败: $e');
     }
     
     if (mounted) {
@@ -1247,8 +1213,8 @@ class _NoteHomePageState extends State<NoteHomePage> with TickerProviderStateMix
 }
 
 class _ThemeSelectorSheet extends StatelessWidget {
-  final AppTheme currentTheme;
-  final Function(AppTheme) onSelectTheme;
+  final AppThemeConfig currentTheme;
+  final Function(AppThemeConfig) onSelectTheme;
 
   const _ThemeSelectorSheet({
     required this.currentTheme,
@@ -1334,7 +1300,7 @@ class _ThemeSelectorSheet extends StatelessWidget {
 }
 
 class _ThemeCard extends StatelessWidget {
-  final AppTheme theme;
+  final AppThemeConfig theme;
   final bool isSelected;
   final bool isDark;
   final VoidCallback onTap;
@@ -1862,11 +1828,7 @@ class _NoteEditorPageState extends State<NoteEditorPage> with SingleTickerProvid
 
     setState(() => _isSaved = true);
     
-    if (silent) {
-      Navigator.of(context).pop(note);
-    } else {
-      Navigator.pop(context, note);
-    }
+    Navigator.pop(context, note);
   }
 
   Future<void> _shareNote() async {
@@ -1877,35 +1839,6 @@ class _NoteEditorPageState extends State<NoteEditorPage> with SingleTickerProvid
       content,
       _images,
     );
-  }
-
-  Future<bool> _onWillPop() async {
-    if (_isSaved) return true;
-    
-    final title = _titleController.text.trim();
-    final content = _contentController.text.trim();
-    
-    if (title.isEmpty && content.isEmpty) return true;
-    
-    return await showDialog<bool>(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('是否保存笔记？'),
-        content: const Text('你有未保存的更改，是否保存？'),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context, false),
-            child: const Text('不保存'),
-          ),
-          TextButton(
-            onPressed: () {
-              _saveNote();
-            },
-            child: const Text('保存'),
-          ),
-        ],
-      ),
-    ) ?? false;
   }
 
   void _addTag() {
@@ -1981,8 +1914,37 @@ class _NoteEditorPageState extends State<NoteEditorPage> with SingleTickerProvid
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
 
-    return WillPopScope(
-      onWillPop: _onWillPop,
+    return PopScope(
+      canPop: _isSaved || (_titleController.text.trim().isEmpty && _contentController.text.trim().isEmpty),
+      onPopInvoked: (didPop) async {
+        if (didPop) return;
+        
+        final shouldSave = await showDialog<bool>(
+          context: context,
+          builder: (context) => AlertDialog(
+            title: const Text('是否保存笔记？'),
+            content: const Text('你有未保存的更改，是否保存？'),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(context, false),
+                child: const Text('不保存'),
+              ),
+              TextButton(
+                onPressed: () {
+                  Navigator.pop(context, true);
+                },
+                child: const Text('保存'),
+              ),
+            ],
+          ),
+        );
+        
+        if (shouldSave == true) {
+          _saveNote();
+        } else {
+          Navigator.pop(context);
+        }
+      },
       child: Scaffold(
         backgroundColor: Color(_selectedColor),
         body: SafeArea(
@@ -1990,10 +1952,8 @@ class _NoteEditorPageState extends State<NoteEditorPage> with SingleTickerProvid
             children: [
               EditorHeader(
                 saveStatus: _isSaved ? '已保存' : '编辑中...',
-                onBack: () async {
-                  if (await _onWillPop()) {
-                    Navigator.pop(context);
-                  }
+                onBack: () {
+                  Navigator.pop(context, _isSaved ? widget.note : null);
                 },
                 onShare: _shareNote,
                 onSave: _saveNote,
@@ -2098,6 +2058,8 @@ class Note {
   final bool isFavorite;
   final String mood;
   final List<String> images;
+  final String category;
+  final bool isPinned;
 
   Note({
     required this.id,
@@ -2109,6 +2071,8 @@ class Note {
     this.isFavorite = false,
     this.mood = '',
     this.images = const [],
+    this.category = '',
+    this.isPinned = false,
   });
 
   Note copyWith({
@@ -2121,6 +2085,8 @@ class Note {
     bool? isFavorite,
     String? mood,
     List<String>? images,
+    String? category,
+    bool? isPinned,
   }) {
     return Note(
       id: id ?? this.id,
@@ -2132,6 +2098,8 @@ class Note {
       isFavorite: isFavorite ?? this.isFavorite,
       mood: mood ?? this.mood,
       images: images ?? this.images,
+      category: category ?? this.category,
+      isPinned: isPinned ?? this.isPinned,
     );
   }
 
@@ -2145,6 +2113,8 @@ class Note {
         'isFavorite': isFavorite,
         'mood': mood,
         'images': images,
+        'category': category,
+        'isPinned': isPinned,
       };
 
   factory Note.fromJson(Map<String, dynamic> json) {
@@ -2180,6 +2150,8 @@ class Note {
       isFavorite: json['isFavorite'] == 1 || json['isFavorite'] == true,
       mood: json['mood'] as String? ?? '',
       images: imagesList,
+      category: json['category'] as String? ?? '',
+      isPinned: json['isPinned'] == 1 || json['isPinned'] == true,
     );
   }
 }
@@ -2319,7 +2291,7 @@ class NoteTemplateService {
 
 enum ViewMode { grid, list, compact }
 
-class AppTheme {
+class AppThemeConfig {
   final String id;
   final String name;
   final String icon;
@@ -2328,7 +2300,7 @@ class AppTheme {
   final Color surfaceColor;
   final Brightness brightness;
 
-  const AppTheme({
+  const AppThemeConfig({
     required this.id,
     required this.name,
     required this.icon,
@@ -2337,30 +2309,11 @@ class AppTheme {
     required this.surfaceColor,
     required this.brightness,
   });
-
-  ThemeData toThemeData() {
-    return ThemeData(
-      useMaterial3: true,
-      brightness: brightness,
-      colorScheme: ColorScheme.fromSeed(
-        seedColor: primaryColor,
-        brightness: brightness,
-        surface: surfaceColor,
-      ),
-      fontFamily: 'Roboto',
-      scaffoldBackgroundColor: backgroundColor,
-      appBarTheme: AppBarTheme(
-        centerTitle: true,
-        elevation: 0,
-        backgroundColor: backgroundColor,
-      ),
-    );
-  }
 }
 
 class ThemeService {
-  static const List<AppTheme> appThemes = [
-    AppTheme(
+  static const List<AppThemeConfig> appThemes = [
+    AppThemeConfig(
       id: 'default',
       name: '默认紫',
       icon: '💜',
@@ -2369,7 +2322,7 @@ class ThemeService {
       surfaceColor: Color(0xFFFFFFFF),
       brightness: Brightness.light,
     ),
-    AppTheme(
+    AppThemeConfig(
       id: 'blue',
       name: '清新蓝',
       icon: '💙',
@@ -2378,7 +2331,7 @@ class ThemeService {
       surfaceColor: Color(0xFFFFFFFF),
       brightness: Brightness.light,
     ),
-    AppTheme(
+    AppThemeConfig(
       id: 'green',
       name: '自然绿',
       icon: '💚',
@@ -2387,7 +2340,7 @@ class ThemeService {
       surfaceColor: Color(0xFFFFFFFF),
       brightness: Brightness.light,
     ),
-    AppTheme(
+    AppThemeConfig(
       id: 'pink',
       name: '可爱粉',
       icon: '💗',
@@ -2396,7 +2349,7 @@ class ThemeService {
       surfaceColor: Color(0xFFFFFFFF),
       brightness: Brightness.light,
     ),
-    AppTheme(
+    AppThemeConfig(
       id: 'orange',
       name: '活力橙',
       icon: '🧡',
@@ -2405,7 +2358,7 @@ class ThemeService {
       surfaceColor: Color(0xFFFFFFFF),
       brightness: Brightness.light,
     ),
-    AppTheme(
+    AppThemeConfig(
       id: 'red',
       name: '热情红',
       icon: '❤️',
@@ -2414,7 +2367,7 @@ class ThemeService {
       surfaceColor: Color(0xFFFFFFFF),
       brightness: Brightness.light,
     ),
-    AppTheme(
+    AppThemeConfig(
       id: 'dark',
       name: '深邃黑',
       icon: '🌙',
@@ -2423,7 +2376,7 @@ class ThemeService {
       surfaceColor: Color(0xFF1E1E1E),
       brightness: Brightness.dark,
     ),
-    AppTheme(
+    AppThemeConfig(
       id: 'dark_blue',
       name: '星空蓝',
       icon: '🌌',
@@ -2434,14 +2387,14 @@ class ThemeService {
     ),
   ];
 
-  static AppTheme getThemeById(String id) {
+  static AppThemeConfig getThemeById(String id) {
     return appThemes.firstWhere(
       (theme) => theme.id == id,
       orElse: () => appThemes[0],
     );
   }
 
-  static Future<AppTheme> loadSavedTheme() async {
+  static Future<AppThemeConfig> loadSavedTheme() async {
     try {
       final prefs = await SharedPreferences.getInstance();
       final themeId = prefs.getString('appThemeId') ?? 'default';
@@ -2476,7 +2429,7 @@ class DatabaseService {
     
     return await openDatabase(
       path,
-      version: 1,
+      version: 2,
       onCreate: (db, version) async {
         await db.execute('''
           CREATE TABLE notes (
@@ -2489,8 +2442,18 @@ class DatabaseService {
             isFavorite INTEGER,
             mood TEXT,
             images TEXT,
-            updatedAt TEXT
+            updatedAt TEXT,
+            category TEXT,
+            isPinned INTEGER
           )
+        ''');
+        
+        await db.execute('''
+          CREATE INDEX idx_notes_createdAt ON notes(createdAt DESC)
+        ''');
+        
+        await db.execute('''
+          CREATE INDEX idx_notes_isFavorite ON notes(isFavorite)
         ''');
         
         await db.execute('''
@@ -2517,6 +2480,14 @@ class DatabaseService {
             FOREIGN KEY (noteId) REFERENCES notes(id)
           )
         ''');
+      },
+      onUpgrade: (db, oldVersion, newVersion) async {
+        if (oldVersion < 2) {
+          await db.execute('ALTER TABLE notes ADD COLUMN category TEXT');
+          await db.execute('ALTER TABLE notes ADD COLUMN isPinned INTEGER DEFAULT 0');
+          await db.execute('CREATE INDEX IF NOT EXISTS idx_notes_createdAt ON notes(createdAt DESC)');
+          await db.execute('CREATE INDEX IF NOT EXISTS idx_notes_isFavorite ON notes(isFavorite)');
+        }
       },
     );
   }

@@ -1,3 +1,4 @@
+import 'dart:io';
 import 'package:flutter/material.dart';
 import '../theme/app_theme.dart';
 
@@ -141,7 +142,7 @@ class _ToolbarButton extends StatelessWidget {
               size: 22,
               color: isEnabled
                   ? (isDark ? Colors.white70 : AppColors.textSecondary)
-                  : (isDark ? Colors.white20 : AppColors.textTertiary),
+                  : (isDark ? Colors.white.withOpacity(0.2) : AppColors.textTertiary),
             ),
           ),
         ),

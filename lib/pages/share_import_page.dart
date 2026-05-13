@@ -1,7 +1,9 @@
+import 'dart:io';
 import 'package:flutter/material.dart';
+import 'package:http/http.dart' as http;
+import 'package:html/parser.dart' as html_parser;
+import '../main.dart';
 import '../services/share_service.dart';
-import '../models/note.dart';
-import '../services/database_service.dart';
 
 class ShareImportPage extends StatefulWidget {
   final ShareData shareData;
@@ -17,11 +19,23 @@ class _ShareImportPageState extends State<ShareImportPage> {
   String _content = '';
   LinkInfo? _linkInfo;
   bool _isLoading = false;
+  
+  late TextEditingController _titleController;
+  late TextEditingController _contentController;
 
   @override
   void initState() {
     super.initState();
+    _titleController = TextEditingController(text: _title);
+    _contentController = TextEditingController(text: _content);
     _processShareData();
+  }
+
+  @override
+  void dispose() {
+    _titleController.dispose();
+    _contentController.dispose();
+    super.dispose();
   }
 
   Future<void> _processShareData() async {
@@ -38,17 +52,42 @@ class _ShareImportPageState extends State<ShareImportPage> {
       }
 
       if (_isUrl(widget.shareData.text)) {
-        _linkInfo = await ShareService().extractLinkInfo(widget.shareData.text);
+        _linkInfo = await _extractLinkInfo(widget.shareData.text);
         if (_linkInfo != null) {
           _title = _linkInfo!.title;
           _content = '${_linkInfo!.description}\n\n${_linkInfo!.url}';
         }
       }
+      
+      _titleController.text = _title;
+      _contentController.text = _content;
     } catch (e) {
-      print('Error processing share data: $e');
+      debugPrint('Error processing share data: $e');
     } finally {
       setState(() => _isLoading = false);
     }
+  }
+
+  Future<LinkInfo?> _extractLinkInfo(String url) async {
+    try {
+      final response = await http.get(Uri.parse(url));
+      if (response.statusCode == 200) {
+        final document = html_parser.parse(response.body);
+        final title = document.querySelector('title')?.text ?? url;
+        final description = document.querySelector('meta[name="description"]')?.attributes['content'] ?? '';
+        final image = document.querySelector('meta[property="og:image"]')?.attributes['content'];
+        
+        return LinkInfo(
+          url: url,
+          title: title,
+          description: description,
+          imageUrl: image,
+        );
+      }
+    } catch (e) {
+      debugPrint('Error extracting link info: $e');
+    }
+    return null;
   }
 
   void _detectContentType(String text) {
@@ -69,7 +108,10 @@ class _ShareImportPageState extends State<ShareImportPage> {
   }
 
   Future<void> _saveNote() async {
-    if (_title.isEmpty && _content.isEmpty) {
+    final title = _titleController.text.trim();
+    final content = _contentController.text.trim();
+    
+    if (title.isEmpty && content.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('请输入内容')),
       );
@@ -79,19 +121,17 @@ class _ShareImportPageState extends State<ShareImportPage> {
     setState(() => _isLoading = true);
 
     try {
-      Note note = Note(
+      final note = Note(
         id: DateTime.now().millisecondsSinceEpoch.toString(),
-        title: _title.isNotEmpty ? _title : '无标题',
-        content: _content,
-        createdAt: DateTime.now().toIso8601String(),
-        updatedAt: DateTime.now().toIso8601String(),
+        title: title.isNotEmpty ? title : '无标题',
+        content: content,
+        color: 0xFFFFF5E6,
         tags: ['分享'],
-        isCompleted: false,
-        isPinned: false,
+        createdAt: DateTime.now(),
         images: widget.shareData.imagePaths,
       );
 
-      await DatabaseService().insertNote(note);
+      await DatabaseService.insertNote(note);
 
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -141,8 +181,8 @@ class _ShareImportPageState extends State<ShareImportPage> {
   }
 
   Widget _buildContentTypeBadge() {
-    String typeText;
-    Color typeColor;
+    String typeText = '混合';
+    Color typeColor = Colors.grey;
 
     switch (widget.shareData.type) {
       case ShareType.text:
@@ -161,9 +201,10 @@ class _ShareImportPageState extends State<ShareImportPage> {
         typeText = '文件';
         typeColor = Colors.orange;
         break;
-      default:
+      case ShareType.mixed:
         typeText = '混合';
         typeColor = Colors.grey;
+        break;
     }
 
     return Container(
@@ -228,7 +269,8 @@ class _ShareImportPageState extends State<ShareImportPage> {
       physics: const NeverScrollableScrollPhysics(),
       gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
         crossAxisCount: 3,
-        gap: 8,
+        crossAxisSpacing: 8,
+        mainAxisSpacing: 8,
       ),
       itemCount: widget.shareData.imagePaths.length,
       itemBuilder: (context, index) {
@@ -266,8 +308,7 @@ class _ShareImportPageState extends State<ShareImportPage> {
             labelText: '标题',
             border: OutlineInputBorder(),
           ),
-          controller: TextEditingController(text: _title),
-          onChanged: (value) => _title = value,
+          controller: _titleController,
           maxLines: 1,
         ),
         const SizedBox(height: 12),
@@ -277,8 +318,7 @@ class _ShareImportPageState extends State<ShareImportPage> {
             border: OutlineInputBorder(),
             alignLabelWithHint: true,
           ),
-          controller: TextEditingController(text: _content),
-          onChanged: (value) => _content = value,
+          controller: _contentController,
           maxLines: 10,
           keyboardType: TextInputType.multiline,
         ),
