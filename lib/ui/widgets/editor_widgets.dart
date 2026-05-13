@@ -210,7 +210,7 @@ class EditorHeader extends StatelessWidget {
           ),
           Expanded(
             child: AnimatedSwitcher(
-              duration: AppDurations.normal,
+              duration: const Duration(milliseconds: 120),
               child: Container(
                 key: ValueKey(saveStatus),
                 padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
@@ -357,7 +357,7 @@ class ColorPickerBar extends StatelessWidget {
           return GestureDetector(
             onTap: () => onColorSelected(colors[index]),
             child: AnimatedContainer(
-              duration: AppDurations.fast,
+              duration: const Duration(milliseconds: 80),
               width: 36,
               height: 36,
               decoration: BoxDecoration(
@@ -417,7 +417,7 @@ class MoodSelector extends StatelessWidget {
           return GestureDetector(
             onTap: () => onMoodSelected(mood),
             child: AnimatedContainer(
-              duration: AppDurations.fast,
+              duration: const Duration(milliseconds: 80),
               width: 44,
               height: 44,
               decoration: BoxDecoration(

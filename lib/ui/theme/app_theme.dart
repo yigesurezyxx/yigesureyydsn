@@ -43,10 +43,10 @@ class AppColors {
 }
 
 class AppDurations {
-  static const Duration fast = Duration(milliseconds: 120);
-  static const Duration normal = Duration(milliseconds: 180);
-  static const Duration slow = Duration(milliseconds: 250);
-  static const Duration page = Duration(milliseconds: 280);
+  static const Duration fast = Duration(milliseconds: 80);
+  static const Duration normal = Duration(milliseconds: 120);
+  static const Duration slow = Duration(milliseconds: 160);
+  static const Duration page = Duration(milliseconds: 180);
 }
 
 class AppCurves {

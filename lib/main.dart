@@ -460,7 +460,7 @@ class _NoteHomePageState extends State<NoteHomePage> with TickerProviderStateMix
             ),
           );
         },
-        transitionDuration: const Duration(milliseconds: 280),
+        transitionDuration: const Duration(milliseconds: 180),
       ),
     ).then((newNote) {
       if (newNote != null && newNote is Note) {
